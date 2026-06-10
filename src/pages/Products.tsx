@@ -272,7 +272,6 @@ export function Products() {
           <div className="flex flex-col items-center justify-center py-6">
             <div ref={stickerRef} className="bg-white p-6 border border-slate-200 shadow-sm rounded flex flex-col items-center w-[250px]">
               <div className="text-center mb-2">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">WMS LABEL</p>
                 <p className="text-[12px] font-bold uppercase text-slate-800 line-clamp-1">{stickerProduct?.name}</p>
               </div>
               <Barcode 
@@ -282,9 +281,6 @@ export function Products() {
                 fontSize={10}
                 margin={5}
               />
-              <div className="mt-2 text-center w-full border-t border-slate-100 pt-2">
-                <p className="text-[10px] font-bold text-slate-600 uppercase">{stickerProduct?.sku}</p>
-              </div>
             </div>
             
             <div className="mt-8 w-full space-y-3">
