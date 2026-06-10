@@ -1,0 +1,269 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "description": "Super Admin, Warehouse Manager, or Warehouse Staff" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "email", "role", "status", "createdAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["name", "createdAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product catalog item",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string" },
+        "sku": { "type": "string" },
+        "barcode": { "type": "string" },
+        "name": { "type": "string" },
+        "unit": { "type": "string" },
+        "weight": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["sku", "barcode", "name", "createdAt"]
+    },
+    "Warehouse": {
+      "title": "Warehouse",
+      "description": "Physical warehouse location",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "pic": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["code", "name", "status"]
+    },
+    "WarehouseLocation": {
+      "title": "Warehouse Location",
+      "description": "Specific rack or bin inside a warehouse",
+      "type": "object",
+      "properties": {
+        "warehouseId": { "type": "string" },
+        "locationCode": { "type": "string" },
+        "zone": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["warehouseId", "locationCode"]
+    },
+    "Inventory": {
+      "title": "Inventory Snapshot",
+      "description": "Current snapshot of stock per product/warehouse/location",
+      "type": "object",
+      "properties": {
+        "warehouseId": { "type": "string" },
+        "locationId": { "type": "string" },
+        "productId": { "type": "string" },
+        "availableQty": { "type": "number" },
+        "reservedQty": { "type": "number" },
+        "damagedQty": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["warehouseId", "productId", "availableQty", "reservedQty", "damagedQty", "updatedAt"]
+    },
+    "InventoryTransaction": {
+      "title": "Inventory Transaction",
+      "description": "Source of truth for stock movement",
+      "type": "object",
+      "properties": {
+        "warehouseId": { "type": "string" },
+        "productId": { "type": "string" },
+        "transactionType": { "type": "string" },
+        "referenceType": { "type": "string" },
+        "referenceId": { "type": "string" },
+        "qtyIn": { "type": "number" },
+        "qtyOut": { "type": "number" },
+        "balanceAfter": { "type": "number" },
+        "remarks": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["warehouseId", "productId", "transactionType", "balanceAfter", "createdAt"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Supplier information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["name"]
+    },
+    "Inbound": {
+      "title": "Inbound Record",
+      "description": "Goods receiving record",
+      "type": "object",
+      "properties": {
+        "supplierId": { "type": "string" },
+        "warehouseId": { "type": "string" },
+        "inboundNumber": { "type": "string" },
+        "supplierSjNumber": { "type": "string" },
+        "receiveDate": { "type": "number" },
+        "notes": { "type": "string" },
+        "status": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "items": { "type": "array" } 
+      },
+      "required": ["warehouseId", "inboundNumber", "status", "createdAt"]
+    },
+    "DeliveryOrder": {
+      "title": "Delivery Order",
+      "description": "Goods issuing record",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "warehouseId": { "type": "string" },
+        "doNumber": { "type": "string" },
+        "deliveryDate": { "type": "number" },
+        "notes": { "type": "string" },
+        "status": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "items": { "type": "array" }
+      },
+      "required": ["warehouseId", "doNumber", "status", "createdAt"]
+    },
+    "WarehouseTransfer": {
+      "title": "Warehouse Transfer",
+      "description": "Inter-warehouse stock transfer",
+      "type": "object",
+      "properties": {
+        "sourceWarehouseId": { "type": "string" },
+        "destinationWarehouseId": { "type": "string" },
+        "transferNumber": { "type": "string" },
+        "transferDate": { "type": "number" },
+        "notes": { "type": "string" },
+        "status": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "items": { "type": "array" }
+      },
+      "required": ["sourceWarehouseId", "destinationWarehouseId", "transferNumber", "status", "createdAt"]
+    },
+    "StockOpname": {
+      "title": "Stock Opname",
+      "description": "Physical stock counting",
+      "type": "object",
+      "properties": {
+        "warehouseId": { "type": "string" },
+        "opnameNumber": { "type": "string" },
+        "opnameDate": { "type": "number" },
+        "status": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "items": { "type": "array" }
+      },
+      "required": ["warehouseId", "opnameNumber", "status", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "System usage audit log",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "module": { "type": "string" },
+        "action": { "type": "string" },
+        "referenceId": { "type": "string" },
+        "oldValue": { "type": "string" },
+        "newValue": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["userId", "module", "action", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles and RBAC roles"
+    },
+    "categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Product categories"
+    },
+    "products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Product catalog"
+    },
+    "warehouses/{warehouseId}": {
+      "schema": { "$ref": "#/entities/Warehouse" },
+      "description": "Warehouses"
+    },
+    "warehouse_locations/{locationId}": {
+      "schema": { "$ref": "#/entities/WarehouseLocation" },
+      "description": "Locations within warehouses"
+    },
+    "inventory/{inventoryId}": {
+      "schema": { "$ref": "#/entities/Inventory" },
+      "description": "Current stock snapshot"
+    },
+    "inventory_transactions/{txId}": {
+      "schema": { "$ref": "#/entities/InventoryTransaction" },
+      "description": "Source of truth for stock movements"
+    },
+    "suppliers/{supplierId}": {
+      "schema": { "$ref": "#/entities/Supplier" },
+      "description": "Suppliers database"
+    },
+    "customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Customers database"
+    },
+    "inbounds/{inboundId}": {
+      "schema": { "$ref": "#/entities/Inbound" },
+      "description": "Receiving operations"
+    },
+    "delivery_orders/{doId}": {
+      "schema": { "$ref": "#/entities/DeliveryOrder" },
+      "description": "Issuing operations"
+    },
+    "warehouse_transfers/{txId}": {
+      "schema": { "$ref": "#/entities/WarehouseTransfer" },
+      "description": "Stock transfers between warehouses"
+    },
+    "stock_opnames/{opnameId}": {
+      "schema": { "$ref": "#/entities/StockOpname" },
+      "description": "Physical counts"
+    },
+    "audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Activity logs"
+    }
+  }
+}

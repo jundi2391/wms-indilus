@@ -1,0 +1,81 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Role-based access control - Simplified: "super admin semua aja"
+    // Everyone who is signed in is treated as Super Admin
+    function isSuperAdmin() { return isSignedIn(); }
+    function isManager() { return isSignedIn(); }
+    function isStaff() { return isSignedIn(); }
+
+    // Global Safety Net - Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Product & Categories
+    match /categories/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /products/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Warehouse & Locations
+    match /warehouses/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /warehouse_locations/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Inventory & Transactions
+    match /inventory/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /inventory_transactions/{id} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isSuperAdmin();
+    }
+
+    // Suppliers & Customers
+    match /suppliers/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /customers/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /expeditions/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Operations
+    match /inbounds/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /delivery_orders/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /warehouse_transfers/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /stock_opnames/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // System
+    match /audit_logs/{id} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if isSuperAdmin();
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "COREHUB",
+  "description": "Premium Warehouse Management System for CoreHub - Featuring PDA scanning, inventory tracking, and integrated logistics management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
