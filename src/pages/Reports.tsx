@@ -71,7 +71,8 @@ export function Reports() {
             d.items.forEach((item: any) => {
               data.push({
                 'No Inbound': d.inboundNumber,
-                'No SJ Pemasok': d.supplierSjNumber || '-',
+                'No DO Pemasok': d.supplierSjNumber || '-',
+                'No PO': d.poNumber || '-',
                 'Tanggal': format(d.createdAt, 'dd-MM-yyyy'),
                 'Jam': format(d.createdAt, 'HH:mm'),
                 'Nama Pemasok': supplier,
@@ -90,18 +91,26 @@ export function Reports() {
         const q = query(collection(db, 'delivery_orders'), where('createdAt', '>=', start), where('createdAt', '<=', end), orderBy('createdAt', 'desc'));
         const snap = await getDocs(q);
         
+        const underlyingDocs = await getDocs(collection(db, 'underlying_pos'));
+        const undPos = underlyingDocs.docs.map(x => ({id: x.id, ...x.data() as any}));
+
+        const supplyDocs = await getDocs(collection(db, 'supply_pos'));
+        const supplyPos = supplyDocs.docs.map(x => ({id: x.id, ...x.data() as any}));
+        
         snap.docs.forEach(doc => {
           const d = doc.data();
           const customer = customers.find(c => c.id === d.customerId)?.name || 'Pelanggan Umum';
           const warehouse = warehouses.find(w => w.id === d.warehouseId)?.name || 'Gudang Umum';
           const courier = expeditions.find(e => e.id === d.expeditionId)?.name || '-';
+          const uPoObj = undPos.find(u => u.id === d.underlyingPoId);
+          const sPoObj = supplyPos.find(s => s.id === d.supplyPoId);
 
           if (d.items && d.items.length > 0) {
             d.items.forEach((item: any) => {
               data.push({
-                'No Outbound': d.doNumber, // Use doNumber as No Outbound
                 'No DO': d.doNumber,
-                'No PO': d.poNumber || '-',
+                'No Underlying PO': uPoObj?.poNumber || d.poNumber || '-',
+                'No Supply PO': sPoObj?.supplyPoNumber || '-',
                 'Tanggal': format(d.createdAt, 'dd-MM-yyyy'),
                 'Jam': format(d.createdAt, 'HH:mm'),
                 'Nama Pelanggan': customer,
@@ -112,6 +121,7 @@ export function Reports() {
                 'Nama Barang': item.product?.name || 'Produk Tidak Diketahui',
                 'Qty': item.qty || 0,
                 'Satuan': item.product?.unit || 'Pcs',
+                'Status DO': d.status || 'Verified',
                 'Catatan': d.notes || '-'
               });
             });
@@ -129,12 +139,15 @@ export function Reports() {
             'Nama Produk': product?.name || 'Produk Tidak Diketahui',
             'Kategori': categories.find(c => c.id === product?.categoryId)?.name || '-',
             'Gudang': warehouse,
-            'Stok Saat Ini': d.availableQty || 0,
+            'Stok Tersedia (Available)': d.availableQty || 0,
+            'Stok Dipesan (Reserved)': d.reservedQty || 0,
+            'Stok Rusak/Refund (Damaged)': d.damagedQty || 0,
+            'Total Stok (On Hand)': (d.availableQty || 0) + (d.reservedQty || 0) + (d.damagedQty || 0),
             'Satuan': product?.unit || 'Pcs',
             'Minimum Stok': product?.minStock || 0
           };
         });
-        filename = `Laporan_Inventaris_Aktif_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+        filename = `Laporan_Inventaris_Lengkap_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
       }
 
       if (data.length === 0) {
@@ -156,10 +169,12 @@ export function Reports() {
   };
 
   return (
-    <div className="flex flex-col space-y-8 max-w-[1200px] mx-auto pb-20">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Laporan & Analitik</h1>
-        <p className="text-slate-500">Unduh laporan operasional dalam format Excel</p>
+    <div className="space-y-6 max-w-7xl mx-auto pb-20">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Laporan & Analitik</h2>
+          <p className="text-sm md:text-base text-slate-500 font-medium mt-2">Unduh laporan operasional dalam format Excel</p>
+        </div>
       </div>
 
       <Card className="border-slate-200 shadow-sm border-none bg-slate-50 p-6 rounded-3xl">

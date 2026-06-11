@@ -85,16 +85,16 @@ export function Expeditions() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Ekspedisi</h2>
-          <p className="text-slate-500 text-sm mt-1">Kelola perusahaan pengiriman & kurir</p>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Ekspedisi</h2>
+          <p className="text-sm md:text-base text-slate-500 font-medium mt-2">Kelola perusahaan pengiriman & kurir</p>
         </div>
         
         {isAdminOrManager && (
           <Dialog open={isOpen} onOpenChange={(v) => { setIsOpen(v); if(!v) setEditExpedition(null); }}>
             <DialogTrigger render={
-              <Button onClick={openAdd} className="bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg px-6 font-bold shadow-sm transition-all">
+              <Button onClick={openAdd} className="w-full sm:w-auto bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg px-6 font-bold shadow-sm transition-all h-11">
                 <Plus className="w-4 h-4 mr-2" />
                 Tambah Ekspedisi
               </Button>
@@ -128,7 +128,8 @@ export function Expeditions() {
             <Input placeholder="Cari ekspedisi..." className="pl-9 h-10 rounded-lg bg-white border-slate-200 focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" />
           </div>
         </div>
-        <Table>
+        <div className="overflow-x-auto">
+          <Table className="min-w-[600px]">
           <TableHeader className="bg-slate-50 border-b border-slate-200">
             <TableRow className="hover:bg-transparent h-12">
               <TableHead className="font-bold text-slate-600 text-xs pl-6">Kode</TableHead>
@@ -174,6 +175,7 @@ export function Expeditions() {
             )}
           </TableBody>
         </Table>
+      </div>
       </div>
     </div>
   );

@@ -111,16 +111,16 @@ export function Warehouses() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Gudang</h2>
-          <p className="text-slate-500 text-sm mt-1">Kelola daftar gudang dan lokasi penyimpanan</p>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Gudang</h2>
+          <p className="text-sm md:text-base text-slate-500 font-medium mt-2">Kelola daftar gudang dan lokasi penyimpanan</p>
         </div>
         
         {isAdmin && (
           <Dialog open={isOpen} onOpenChange={(v) => { setIsOpen(v); if(!v) setEditWarehouse(null); }}>
             <DialogTrigger render={
-              <Button onClick={openAdd} className="bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg px-6 font-bold shadow-sm transition-all">
+              <Button onClick={openAdd} className="w-full sm:w-auto bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg px-6 font-bold shadow-sm transition-all h-11">
                 <Plus className="w-4 h-4 mr-2" />
                 Tambah Gudang
               </Button>

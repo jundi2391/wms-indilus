@@ -72,6 +72,32 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // PRD V2 New Collections
+    match /owners/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /project_executors/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /underlying_pos/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /supply_pos/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /sales_orders/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /return_requests/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /damage_reports/{id} {
+      allow read, write: if isSignedIn();
+    }
+    match /inventory_ledgers/{id} {
+      allow read, write: if isSignedIn();
+    }
+
     // System
     match /audit_logs/{id} {
       allow read, create: if isSignedIn();

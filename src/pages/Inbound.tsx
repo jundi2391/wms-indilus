@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, addDoc, doc, writeBatch, runTransaction, onSnapshot, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, writeBatch, runTransaction, onSnapshot, deleteDoc, updateDoc, query } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { ScanBarcode, CheckCircle2, Pencil, Trash2, MoreVertical, Search, ArrowDownToLine, Plus, Truck, Eye } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
@@ -25,8 +25,14 @@ export function Inbound() {
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [inbounds, setInbounds] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [owners, setOwners] = useState<any[]>([]);
+  const [supplyPos, setSupplyPos] = useState<any[]>([]);
   const [isProcessingPending, setIsProcessingPending] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [inboundType, setInboundType] = useState<'General' | 'SPO'>('General');
+  const [selectedSPOId, setSelectedSPOId] = useState('');
+  const [selectedOwnerId, setSelectedOwnerId] = useState('');
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
 
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
   const [editInbound, setEditInbound] = useState<any>(null);
@@ -47,11 +53,19 @@ export function Inbound() {
     const unsubSuppliers = onSnapshot(collection(db, 'suppliers'), (snap) => {
       setSuppliers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
+    const unsubOwners = onSnapshot(collection(db, 'owners'), (snap) => {
+      setOwners(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    const unsubSupplyPos = onSnapshot(query(collection(db, 'supply_pos')), (snap) => {
+      setSupplyPos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
     return () => {
       unsubProducts();
       unsubWarehouses();
       unsubInbounds();
       unsubSuppliers();
+      unsubOwners();
+      unsubSupplyPos();
     };
   }, []);
 
@@ -73,7 +87,7 @@ export function Inbound() {
     
     for (const inb of pendingToComplete) {
       try {
-        await completeInboundLogic(inb.id, inb.warehouseId, inb.items);
+        await completeInboundLogic(inb.id, inb.warehouseId, inb.ownerId, inb.items);
       } catch (err) {
         console.error('Gagal menyelesaikan inbound otomatis', inb.id, err);
       }
@@ -81,10 +95,10 @@ export function Inbound() {
     setIsProcessingPending(false);
   };
 
-  const completeInboundLogic = async (inboundId: string, warehouseId: string, inboundItems: any[]) => {
+  const completeInboundLogic = async (inboundId: string, warehouseId: string, ownerId: string, inboundItems: any[]) => {
     const now = Date.now();
     await runTransaction(db, async (transaction) => {
-      const invRefs = inboundItems.map(item => doc(db, 'inventory', `${warehouseId}_${item.product.id}`));
+      const invRefs = inboundItems.map(item => doc(db, 'inventory', `${ownerId}_${warehouseId}_${item.product.id}`));
       const invDocs = await Promise.all(invRefs.map(ref => transaction.get(ref)));
 
       transaction.update(doc(db, 'inbounds', inboundId), {
@@ -97,34 +111,40 @@ export function Inbound() {
         const invRef = invRefs[index];
         const invDoc = invDocs[index];
         let balanceAfter = item.qty;
+        let qtyBefore = 0;
 
         if (invDoc.exists()) {
-          balanceAfter = (invDoc.data().availableQty || 0) + item.qty;
+          qtyBefore = (invDoc.data().availableQty || 0);
+          balanceAfter = qtyBefore + item.qty;
           transaction.update(invRef, {
             availableQty: balanceAfter,
             updatedAt: now
           });
         } else {
           transaction.set(invRef, {
+            ownerId,
             warehouseId,
             productId: item.product.id,
             availableQty: balanceAfter,
             reservedQty: 0,
+            returnQty: 0,
             damagedQty: 0,
             updatedAt: now
           });
         }
 
-        const txRef = doc(collection(db, 'inventory_transactions'));
-        transaction.set(txRef, {
-          warehouseId,
+        const ledgerRef = doc(collection(db, 'inventory_ledgers'));
+        transaction.set(ledgerRef, {
+          transactionNumber: 'TRX-AUTO-' + now + '-' + index,
+          transactionType: 'INBOUND_RECEIVE',
           productId: item.product.id,
-          transactionType: 'inbound',
-          referenceType: 'inbound',
+          ownerId,
+          warehouseId,
+          qtyBefore,
+          qtyChange: item.qty,
+          qtyAfter: balanceAfter,
+          referenceType: 'INBOUND_DO',
           referenceId: inboundId,
-          qtyIn: item.qty,
-          qtyOut: 0,
-          balanceAfter,
           createdBy: 'system-auto',
           createdAt: now
         });
@@ -165,17 +185,39 @@ export function Inbound() {
       return;
     }
     const fd = new FormData(form);
-    const warehouseId = fd.get('warehouseId') as string;
+    
+    let ownerId = selectedOwnerId;
+    let warehouseId = selectedWarehouseId;
+    let supplyPoId = '';
+
+    if (inboundType === 'SPO') {
+      supplyPoId = selectedSPOId;
+      const selectedSupplyPo = supplyPos.find(spo => spo.id === supplyPoId);
+      if (!selectedSupplyPo) {
+        toast.error('Supply PO tidak valid');
+        return;
+      }
+      ownerId = selectedSupplyPo.ownerId;
+      warehouseId = selectedSupplyPo.warehouseId;
+    } else {
+      if (!ownerId || !warehouseId) {
+        toast.error('Pilih Owner dan Gudang untuk General Inbound');
+        return;
+      }
+    }
 
     try {
       const now = Date.now();
       const inboundRef = doc(collection(db, 'inbounds'));
       
       await runTransaction(db, async (transaction) => {
-        const invRefs = items.map(item => doc(db, 'inventory', `${warehouseId}_${item.product.id}`));
+        const invRefs = items.map(item => doc(db, 'inventory', `${ownerId}_${warehouseId}_${item.product.id}`));
         const invDocs = await Promise.all(invRefs.map(ref => transaction.get(ref)));
 
-        transaction.set(inboundRef, {
+        const inbData = {
+          inboundType,
+          supplyPoId,
+          ownerId,
           warehouseId,
           supplierId: fd.get('supplierId'),
           inboundNumber: 'INB-' + now,
@@ -188,61 +230,91 @@ export function Inbound() {
           createdBy: appUser?.uid,
           createdAt: now,
           items
-        });
+        };
+        transaction.set(inboundRef, inbData);
 
         items.forEach((item, index) => {
           const invRef = invRefs[index];
           const invDoc = invDocs[index];
-          let balanceAfter = item.qty;
+          
+          let currentOH = 0;
+          let currentAvailable = 0;
+          let currentReserved = 0;
+          let currentDamaged = 0;
 
           if (invDoc.exists()) {
-            balanceAfter = (invDoc.data().availableQty || 0) + item.qty;
+            currentOH = Number(invDoc.data().onHandQty) || 0;
+            currentAvailable = Number(invDoc.data().availableQty) || 0;
+            currentReserved = Number(invDoc.data().reservedQty) || 0;
+            currentDamaged = Number(invDoc.data().damagedQty) || 0;
+          }
+
+          const newOH = currentOH + item.qty;
+          let newAvailable = currentAvailable;
+
+          if (inboundType === 'General') {
+            // General inbound increases available immediately
+            newAvailable = currentAvailable + item.qty;
+          } else {
+            // SPO inbound increases On Hand. 
+            // Available is derived: OH - Reserved - Damaged.
+            // If SPO approval already created reservation, this OH increase will resolve the potential negative available.
+            newAvailable = newOH - currentReserved - currentDamaged;
+          }
+
+          if (invDoc.exists()) {
             transaction.update(invRef, {
-              availableQty: balanceAfter,
+              onHandQty: newOH,
+              availableQty: newAvailable,
               updatedAt: now
             });
           } else {
             transaction.set(invRef, {
+              ownerId,
               warehouseId,
               productId: item.product.id,
-              availableQty: balanceAfter,
+              onHandQty: newOH,
+              availableQty: newAvailable,
               reservedQty: 0,
+              returnQty: 0,
               damagedQty: 0,
               updatedAt: now
             });
           }
 
-          const txRef = doc(collection(db, 'inventory_transactions'));
-          transaction.set(txRef, {
-            warehouseId,
+          const ledgerRef = doc(collection(db, 'inventory_ledgers'));
+          transaction.set(ledgerRef, {
+            transactionNumber: 'TRX-' + now + '-' + index,
+            transactionType: 'INBOUND_RECEIVE',
             productId: item.product.id,
-            transactionType: 'inbound',
-            referenceType: 'inbound',
+            ownerId,
+            warehouseId,
+            qtyBefore: currentOH,
+            qtyChange: item.qty,
+            qtyAfter: newOH,
+            referenceType: 'INBOUND_DO',
             referenceId: inboundRef.id,
-            qtyIn: item.qty,
-            qtyOut: 0,
-            balanceAfter,
             createdBy: appUser?.uid,
             createdAt: now
           });
         });
+        
+        const auditRef = doc(collection(db, 'audit_logs'));
+        transaction.set(auditRef, {
+            user: appUser?.name || 'Unknown',
+            action: `Inbound DO Created (${inboundType})`,
+            module: 'Inbound',
+            recordId: inboundRef.id,
+            timestamp: now
+        });
       });
       
-      toast.success('Penerimaan berhasil, inventaris telah diperbarui');
+      toast.success('Penerimaan berhasil diproses');
       setItems([]);
+      setSelectedSPOId('');
       form.reset();
     } catch(err: any) {
       toast.error(err.message || 'Gagal memproses barang masuk');
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Apakah Anda yakin ingin menghapus tugas barang masuk ini?')) return;
-    try {
-      await deleteDoc(doc(db, 'inbounds', id));
-      toast.success('Tugas barang masuk berhasil dihapus');
-    } catch (err: any) {
-      toast.error(err.message || 'Gagal menghapus tugas');
     }
   };
 
@@ -300,10 +372,10 @@ export function Inbound() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Barang Masuk</h2>
-          <p className="text-slate-500 text-sm mt-1">Kelola barang masuk dan riwayat penerimaan</p>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Barang Masuk</h2>
+          <p className="text-sm md:text-base text-slate-500 font-medium mt-2">Kelola barang masuk dan riwayat penerimaan</p>
         </div>
       </div>
 
@@ -314,13 +386,13 @@ export function Inbound() {
         </TabsList>
         
         <TabsContent value="receive">
-          <div className="grid lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-[#0C4196] flex flex-col">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm border-t-4 border-t-[#0C4196] flex flex-col">
               <div className="p-6 flex-1 flex flex-col">
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-50 pb-4 mb-6 uppercase tracking-wider">
                   <ScanBarcode className="w-4 h-4 text-[#0C4196]" /> PDA Scanner
                 </h3>
-                <form onSubmit={handleScan} className="space-y-2 mb-8">
+                <form onSubmit={handleScan} className="space-y-3 mb-8">
                   <Label className="text-xs font-bold text-slate-600 uppercase">Scan Barcode Produk</Label>
                   <Input
                     ref={scannerRef}
@@ -380,28 +452,73 @@ export function Inbound() {
             <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
               <div className="p-6 h-full flex flex-col">
                 <h3 className="text-sm font-bold text-slate-900 mb-6 uppercase tracking-wider">Detail Barang Masuk</h3>
+                <div className="flex flex-wrap gap-2 mb-6 p-1 bg-slate-100 rounded-lg w-fit">
+                   <Button 
+                    type="button" 
+                    variant={inboundType === 'General' ? 'default' : 'ghost'} 
+                    onClick={() => setInboundType('General')}
+                    className={`h-8 px-4 text-xs font-bold rounded-md transition-all ${inboundType === 'General' ? 'bg-white text-[#0C4196] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                   >General Stock</Button>
+                   <Button 
+                    type="button" 
+                    variant={inboundType === 'SPO' ? 'default' : 'ghost'} 
+                    onClick={() => setInboundType('SPO')}
+                    className={`h-8 px-4 text-xs font-bold rounded-md transition-all ${inboundType === 'SPO' ? 'bg-white text-[#0C4196] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                   >Supply PO Ref</Button>
+                </div>
+
                 <form id="inboundForm" onSubmit={submitInbound} className="space-y-6 flex-1 flex flex-col">
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-slate-600 uppercase">Gudang Tujuan</Label>
-                      <select name="warehouseId" required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
-                        <option value="">Pilih Gudang...</option>
-                        {warehouses?.map((w: any) => (
-                          <option key={w.id} value={w.id}>{w.name}</option>
-                        ))}
-                      </select>
+                  {inboundType === 'SPO' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="space-y-1.5 flex-1">
+                        <Label className="text-xs font-bold text-slate-600 uppercase">Referensi Supply PO</Label>
+                        <select name="supplyPoId" required value={selectedSPOId} onChange={e => setSelectedSPOId(e.target.value)} className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
+                          <option value="">Pilih Supply PO...</option>
+                          {supplyPos?.filter(spo => spo.status === 'Verified' || spo.status === 'Sent').map((w: any) => (
+                            <option key={w.id} value={w.id}>{w.supplyPoNumber} ({owners.find(o => o.id === w.ownerId)?.name})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5 flex-1 opacity-60">
+                        <Label className="text-xs font-bold text-slate-600 uppercase">Pemasok</Label>
+                        <select name="supplierId" required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
+                          <option value="">Pilih Pemasok...</option>
+                          {suppliers?.map((s: any) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-slate-600 uppercase">Pemasok</Label>
-                      <select name="supplierId" required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
-                        <option value="">Pilih Pemasok...</option>
-                        {suppliers?.map((s: any) => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
+                  ) : (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-600 uppercase">Owner Target</Label>
+                          <select required value={selectedOwnerId} onChange={e => setSelectedOwnerId(e.target.value)} className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
+                            <option value="">Pilih Owner...</option>
+                            {owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-600 uppercase">Gudang Target</Label>
+                          <select required value={selectedWarehouseId} onChange={e => setSelectedWarehouseId(e.target.value)} className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
+                            <option value="">Pilih Gudang...</option>
+                            {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-bold text-slate-600 uppercase">Pemasok</Label>
+                          <select name="supplierId" required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
+                            <option value="">Pilih Pemasok...</option>
+                            {suppliers?.map((s: any) => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-4">
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-bold text-slate-600 uppercase">Nomor PO</Label>
                       <Input name="poNumber" required placeholder="PO-2023-XXXX" className="h-10 rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" />
@@ -411,7 +528,7 @@ export function Inbound() {
                       <Input name="supplierDoNumber" required placeholder="DO-SUPP-XXXX" className="h-10 rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" />
                     </div>
                   </div>
-                  <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                      <div className="space-y-1.5">
                         <Label className="text-xs font-bold text-slate-600 uppercase">Tanggal Masuk</Label>
                         <Input name="scheduledDate" type="date" className="h-10 rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" defaultValue={format(new Date(), 'yyyy-MM-dd')} />
@@ -422,42 +539,44 @@ export function Inbound() {
                     <Input name="notes" placeholder="Catatan opsional untuk pengiriman ini" className="h-10 rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" />
                   </div>
 
-                  <div className="border border-slate-100 rounded-xl mt-6 flex-1 bg-slate-50/10 overflow-hidden shadow-inner min-h-[200px]">
-                    <Table>
-                      <TableHeader className="bg-slate-50/50 border-b border-slate-100">
-                        <TableRow className="h-10">
-                          <TableHead className="font-bold text-slate-600 text-[10px] uppercase pl-4">SKU</TableHead>
-                          <TableHead className="font-bold text-slate-600 text-[10px] uppercase">Produk</TableHead>
-                          <TableHead className="text-right font-bold text-slate-600 text-[10px] uppercase">Jumlah Diterima</TableHead>
-                          <TableHead className="pr-4"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {items.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={4} className="text-center py-20 text-slate-400 bg-white">
-                              <ArrowDownToLine className="w-12 h-12 mx-auto text-slate-100 mb-2" />
-                              <p className="text-sm font-bold text-slate-500">Belum ada item yang di-scan.</p>
-                            </TableCell>
+                  <div className="border border-slate-100 rounded-xl mt-6 flex-1 bg-slate-50/10 shadow-inner min-h-[200px] overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <Table className="min-w-[500px]">
+                        <TableHeader className="bg-slate-50/50 border-b border-slate-100">
+                          <TableRow className="h-10">
+                            <TableHead className="font-bold text-slate-600 text-[10px] uppercase pl-4">SKU</TableHead>
+                            <TableHead className="font-bold text-slate-600 text-[10px] uppercase">Produk</TableHead>
+                            <TableHead className="text-right font-bold text-slate-600 text-[10px] uppercase">Jumlah Diterima</TableHead>
+                            <TableHead className="pr-4"></TableHead>
                           </TableRow>
-                        ) : (
-                          items.map((item, idx) => (
-                            <TableRow key={idx} className="bg-white hover:bg-slate-50/50 h-14">
-                              <TableCell className="font-mono text-xs font-bold text-[#0C4196] pl-4">{item.product.sku}</TableCell>
-                              <TableCell className="font-bold text-slate-900 text-sm">{item.product.name}</TableCell>
-                              <TableCell className="text-right text-lg font-bold text-[#0C4196]">{item.qty}</TableCell>
-                              <TableCell className="text-right pr-4">
-                                 <Button type="button" variant="ghost" size="sm" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 px-3 rounded-lg font-bold text-xs uppercase">Hapus</Button>
+                        </TableHeader>
+                        <TableBody>
+                          {items.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center py-20 text-slate-400 bg-white">
+                                <ArrowDownToLine className="w-12 h-12 mx-auto text-slate-100 mb-2" />
+                                <p className="text-sm font-bold text-slate-500">Belum ada item yang di-scan.</p>
                               </TableCell>
                             </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
+                          ) : (
+                            items.map((item, idx) => (
+                              <TableRow key={idx} className="bg-white hover:bg-slate-50/50 h-14">
+                                <TableCell className="font-mono text-xs font-bold text-[#0C4196] pl-4">{item.product.sku}</TableCell>
+                                <TableCell className="font-bold text-slate-900 text-sm">{item.product.name}</TableCell>
+                                <TableCell className="text-right text-lg font-bold text-[#0C4196]">{item.qty}</TableCell>
+                                <TableCell className="text-right pr-4">
+                                   <Button type="button" variant="ghost" size="sm" onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 px-3 rounded-lg font-bold text-xs uppercase">Hapus</Button>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
 
                   <div className="flex justify-end pt-6 border-t mt-auto">
-                    <Button type="submit" size="lg" disabled={items.length === 0} className="bg-[#0C4196] hover:bg-[#0C4196]/90 text-white shadow-sm rounded-lg px-10 font-bold h-12">
+                    <Button type="submit" size="lg" disabled={items.length === 0} className="w-full sm:w-auto bg-[#0C4196] hover:bg-[#0C4196]/90 text-white shadow-sm rounded-lg px-10 font-bold h-12">
                       <CheckCircle2 className="w-5 h-5 mr-2" />
                       Proses Barang Masuk
                     </Button>
@@ -469,18 +588,21 @@ export function Inbound() {
         </TabsContent>
         <TabsContent value="history">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 border-b bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+            <div className="p-4 border-b bg-slate-50/50 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
                 <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider whitespace-nowrap">Riwayat Barang Masuk</h3>
-                <Input 
-                  placeholder="Cari No. Inbound, PO, atau Pemasok..." 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 w-full sm:w-72 bg-white border-slate-200 focus:border-[#0C4196] focus:ring-[#0C4196] text-xs"
-                />
+                <div className="relative w-full md:w-72">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <Input 
+                    placeholder="Cari No. Inbound, PO, atau Pemasok..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-9 w-full bg-white border-slate-200 focus:border-[#0C4196] focus:ring-[#0C4196] text-xs pl-9"
+                  />
+                </div>
               </div>
               <select
-                className="flex h-9 w-full sm:w-44 rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm focus:border-[#0C4196] outline-none"
+                className="flex h-9 w-full md:w-44 rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm focus:border-[#0C4196] outline-none"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
               >
@@ -490,7 +612,7 @@ export function Inbound() {
               </select>
             </div>
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="min-w-[900px]">
                 <TableHeader className="bg-slate-50 border-b border-slate-200">
                   <TableRow className="h-12 hover:bg-transparent">
                     <TableHead className="font-bold text-slate-600 text-xs pl-6">Tanggal</TableHead>
@@ -627,7 +749,7 @@ export function Inbound() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="rounded-xl">
+        <DialogContent className="sm:max-w-5xl rounded-xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">Ubah Tugas Barang Masuk</DialogTitle>
           </DialogHeader>

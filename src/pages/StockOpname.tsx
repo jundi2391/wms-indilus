@@ -136,10 +136,10 @@ export function StockOpname() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Stock Opname</h2>
-          <p className="text-slate-500 text-sm mt-1">Sesuaikan jumlah stok gudang dengan fisik</p>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Stock Opname</h2>
+          <p className="text-sm md:text-base text-slate-500 font-medium mt-2">Sesuaikan jumlah stok gudang dengan fisik</p>
         </div>
       </div>
 
@@ -169,7 +169,7 @@ export function StockOpname() {
             
             {selectedWarehouseId ? (
               <div className="overflow-x-auto">
-                <Table>
+                <Table className="min-w-[750px]">
                   <TableHeader className="bg-slate-50 border-b">
                     <TableRow className="h-12 hover:bg-transparent">
                       <TableHead className="font-bold text-slate-600 text-xs pl-6">Kode Produk (SKU)</TableHead>
@@ -236,7 +236,7 @@ export function StockOpname() {
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Riwayat Opname</h3>
             </div>
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="min-w-[700px]">
                 <TableHeader className="bg-slate-50 border-b border-slate-200">
                   <TableRow className="hover:bg-transparent h-12">
                     <TableHead className="font-bold text-slate-600 text-xs pl-6">Tanggal</TableHead>

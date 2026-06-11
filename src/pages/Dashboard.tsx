@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PackageOpen, ArrowRightLeft, ArrowDownToLine, ArrowUpFromLine, Loader2, Package, Activity, TrendingUp, TrendingDown } from 'lucide-react';
+import { PackageOpen, ArrowRightLeft, ArrowDownToLine, ArrowUpFromLine, Loader2, Package, Activity, TrendingUp, TrendingDown, Building2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { collection, onSnapshot, query, limit, orderBy, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -13,11 +14,13 @@ export function Dashboard() {
     totalProducts: 0,
     stockValue: 0,
     todayInbound: 0,
+    todayOutbound: 0,
     totalStockCount: 0
   });
 
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
-  const [trendData, setTrendData] = useState<{ day: string, inbound: number, outbound: number }[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // References for mapping
@@ -52,55 +55,37 @@ export function Dashboard() {
     });
 
     const unsubDeliveries = onSnapshot(collection(db, 'delivery_orders'), (snap) => {
-      setDeliveries(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setDeliveries(list);
+      
+      const today = new Date().toDateString();
+      const todayCount = list.filter((d: any) => {
+        const date = d.createdAt ? new Date(d.createdAt).toDateString() : '';
+        return date === today;
+      }).length;
+      setStats(prev => ({ ...prev, todayOutbound: todayCount }));
     });
 
-    // 2. Fetch Inventory for Stats
     const unsubInventory = onSnapshot(collection(db, 'inventory'), (snap) => {
-      let totalVal = 0;
       let totalQty = 0;
-      const items = snap.docs.map(d => d.data());
+      const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setInventory(items);
       
-      items.forEach(inv => {
-        // Use the current products list from outside the effector
+      items.forEach((inv: any) => {
         totalQty += (inv.availableQty || 0);
       });
       setStats(prev => ({ ...prev, totalStockCount: totalQty }));
     });
 
+    const unsubWarehouses = onSnapshot(collection(db, 'warehouses'), (snap) => {
+      setWarehouses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
     // 3. Recent Transactions
-    const qRecent = query(collection(db, 'inventory_transactions'), orderBy('createdAt', 'desc'), limit(10));
+    const qRecent = query(collection(db, 'inventory_transactions'), orderBy('createdAt', 'desc'), limit(15));
     const unsubRecent = onSnapshot(qRecent, (snap) => {
       setRecentTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       setLoading(false);
-    });
-
-    // 4. Trend Data (Last 7 Days)
-    const sevenDaysAgo = subDays(startOfDay(new Date()), 7).getTime();
-    const qTrend = query(collection(db, 'inventory_transactions'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'asc'));
-    const unsubTrend = onSnapshot(qTrend, (snap) => {
-       const idDays = ['MIN', 'SEN', 'SEL', 'RAB', 'KAM', 'JUM', 'SAB'];
-       const last7Days = Array.from({ length: 7 }).map((_, i) => {
-          const date = subDays(new Date(), 6 - i);
-          return {
-             day: idDays[date.getDay()],
-             date: date.toDateString(),
-             inbound: 0,
-             outbound: 0
-          };
-       });
-
-       snap.docs.forEach(d => {
-          const data = d.data();
-          const txDate = new Date(data.createdAt).toDateString();
-          const dayObj = last7Days.find(ld => ld.date === txDate);
-          if (dayObj) {
-             if (data.transactionType === 'inbound') dayObj.inbound += (data.qtyIn || 0);
-             if (data.transactionType === 'outbound') dayObj.outbound += (data.qtyOut || 0);
-          }
-       });
-
-       setTrendData(last7Days);
     });
 
     return () => {
@@ -111,7 +96,7 @@ export function Dashboard() {
       unsubDeliveries();
       unsubInventory();
       unsubRecent();
-      unsubTrend();
+      unsubWarehouses();
     };
   }, []);
 
@@ -161,83 +146,97 @@ export function Dashboard() {
   });
 
   return (
-    <div className="flex flex-col h-full space-y-10 max-w-[1400px] mx-auto pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+    <div className="flex flex-col h-full space-y-6 md:space-y-10 max-w-[1400px] mx-auto pb-10">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-6 md:p-8 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Dashboard</h2>
-          <p className="text-slate-500 font-medium mt-2">Selamat datang kembali, <span className="text-[#0C4196] font-bold">{appUser?.name}</span>.</p>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Dashboard</h2>
+          <p className="text-slate-500 font-medium mt-2 text-sm md:text-base">Selamat datang kembali, <span className="text-[#0C4196] font-bold">{appUser?.name}</span>.</p>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 md:gap-6 w-full md:w-auto justify-between md:justify-end">
            <div className="text-right">
              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Waktu Sistem</p>
-             <p className="text-xl font-bold text-slate-800">{format(new Date(), 'HH:mm:ss')}</p>
+             <p className="text-lg md:text-xl font-bold text-slate-800">{format(new Date(), 'HH:mm:ss')}</p>
            </div>
-           <div className="w-[1px] h-10 bg-slate-200"></div>
-           <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center">
-              <Activity className="w-6 h-6 text-[#0C4196]" />
+           <div className="w-[1px] h-10 bg-slate-200 flex shrink-0"></div>
+           <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+              <Activity className="w-5 h-5 md:w-6 md:h-6 text-[#0C4196]" />
            </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 md:gap-6">
         {[
-          { label: 'Total Produk', value: stats.totalProducts, sub: 'Produk terdaftar', icon: Package, color: 'blue' },
-          { label: 'Stok Terdaftar', value: stats.totalStockCount, sub: 'Unit tersedia', icon: PackageOpen, color: 'blue' },
-          { label: 'Nilai Inventaris', value: `Rp ${stats.stockValue.toLocaleString('id-ID')}`, sub: 'Estimasi nilai', icon: TrendingUp, color: 'blue' },
-          { label: 'Inbound Hari Ini', value: stats.todayInbound, sub: 'Penerimaan hari ini', icon: ArrowDownToLine, color: 'blue' },
+          { label: 'Total Produk', value: stats.totalProducts, sub: 'Varian terdaftar', icon: Package },
+          { label: 'Stok On-Hand', value: stats.totalStockCount, sub: 'Unit tersedia', icon: PackageOpen },
+          { label: 'Inbound Hari Ini', value: stats.todayInbound, sub: 'Penerimaan', icon: ArrowDownToLine },
+          { label: 'Outbound Hari Ini', value: stats.todayOutbound, sub: 'Pengiriman', icon: ArrowUpFromLine },
+          { label: 'Nilai Inventaris', value: `Rp ${stats.stockValue.toLocaleString('id-ID')}`, sub: 'Estimasi', icon: TrendingUp, fullRow: true },
         ].map((kpi, idx) => (
-          <div key={idx} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm group hover:border-[#0C4196] transition-all">
-             <div className="flex justify-between items-start mb-4">
-               <div className="p-3 rounded-xl bg-slate-50 group-hover:bg-blue-50">
-                  <kpi.icon className="w-5 h-5 text-[#0C4196]" />
+          <div key={idx} className={cn(
+            "bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm group hover:border-[#0C4196] transition-all",
+            kpi.fullRow && "col-span-2 md:col-span-1 lg:col-span-1"
+          )}>
+             <div className="flex justify-between items-start mb-2 md:mb-3">
+               <div className="p-2 rounded-xl bg-slate-50 group-hover:bg-blue-50">
+                  <kpi.icon className="w-4 h-4 text-[#0C4196]" />
                </div>
              </div>
-             <p className="text-xs font-bold text-slate-500 mb-1">{kpi.label}</p>
-             <h3 className="text-2xl font-bold text-slate-900">{kpi.value}</h3>
-             <p className="text-[11px] text-slate-400 mt-1">{kpi.sub}</p>
+             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{kpi.label}</p>
+             <h3 className="text-base md:text-xl font-bold text-slate-900 truncate">{kpi.value}</h3>
+             <p className="text-[10px] text-slate-400 mt-0.5">{kpi.sub}</p>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-12 gap-8 items-stretch">
-        <div className="col-span-12 lg:col-span-8 bg-white rounded-3xl border border-slate-200 p-8 shadow-sm flex flex-col h-[450px]">
-          <div className="flex items-center justify-between mb-6">
+      <div className="grid grid-cols-12 gap-6 md:gap-8 items-stretch">
+        <div className="col-span-12 lg:col-span-8 bg-white rounded-2xl md:rounded-3xl border border-slate-200 p-6 md:p-8 shadow-sm flex flex-col min-h-[400px] md:min-h-[450px]">
+          <div className="flex items-center justify-between mb-6 md:mb-8">
             <div>
-              <h4 className="text-xl font-bold text-slate-900">Tren Pergerakan Barang</h4>
-              <p className="text-sm text-slate-500">Statistik keluar masuk 7 hari terakhir</p>
+              <h4 className="text-lg md:text-xl font-bold text-slate-900">Status Gudang</h4>
+              <p className="text-xs md:text-sm text-slate-500">Ringkasan stok per lokasi</p>
             </div>
+            <Building2 className="w-5 h-5 md:w-6 md:h-6 text-slate-300" />
           </div>
 
-          <div className="flex-1 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={trendData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                <XAxis 
-                  dataKey="day" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} 
-                  dy={10}
-                />
-                <YAxis 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 700, fill: '#64748B' }} 
-                />
-                <Tooltip 
-                  cursor={{ fill: '#F8FAFC' }}
-                  contentStyle={{ borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', fontWeight: 'bold' }}
-                />
-                <Legend 
-                  verticalAlign="top" 
-                  align="right" 
-                  iconType="circle" 
-                  wrapperStyle={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', paddingBottom: '20px' }}
-                />
-                <Bar name="Masuk" dataKey="inbound" fill="#0C4196" radius={[4, 4, 0, 0]} barSize={20} />
-                <Bar name="Keluar" dataKey="outbound" fill="#2EB9FF" radius={[4, 4, 0, 0]} barSize={20} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+            {warehouses.length === 0 ? (
+              <div className="col-span-2 flex items-center justify-center h-40 text-slate-400 italic text-sm">
+                Belum ada data gudang
+              </div>
+            ) : (
+              warehouses.map(w => {
+                const warehouseItems = inventory.filter(inv => inv.warehouseId === w.id);
+                const totalQty = warehouseItems.reduce((sum, inv) => sum + (inv.availableQty || 0), 0);
+                const distinctProducts = new Set(warehouseItems.map(inv => inv.productId)).size;
+
+                return (
+                  <div key={w.id} className="p-5 border border-slate-100 rounded-2xl bg-slate-50/50 hover:bg-white hover:shadow-md hover:border-blue-100 transition-all group">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="space-y-1">
+                        <h5 className="font-bold text-slate-900 tracking-tight">{w.name}</h5>
+                        <p className="text-[10px] text-slate-500 uppercase font-medium">{w.location || 'Lokasi tidak diset'}</p>
+                      </div>
+                      <div className="px-2 py-1 bg-white rounded-lg border border-slate-100 shadow-sm">
+                        <span className="text-[10px] font-bold text-[#0C4196]">{totalQty.toLocaleString()} Unit</span>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                       <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                          <div 
+                            className="bg-[#0C4196] h-full rounded-full group-hover:bg-[#2EB9FF] transition-all" 
+                            style={{ width: `${Math.min(100, (totalQty / 1000) * 100)}%` }} // Dummy capacity calculation
+                          />
+                       </div>
+                       <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          <span>{distinctProducts} SKU</span>
+                          <span>{w.type || 'Storage'}</span>
+                       </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 

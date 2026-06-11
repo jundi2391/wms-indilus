@@ -120,14 +120,14 @@ export function Products() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Produk</h2>
-          <p className="text-slate-500 text-sm mt-1">Kelola katalog produk dan barcode</p>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Produk</h2>
+          <p className="text-sm md:text-base text-slate-500 font-medium mt-2">Kelola katalog produk dan barcode</p>
         </div>
         <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) setEditProduct(null); }}>
-          <DialogTrigger render={
-            <Button className="bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg px-6 font-bold shadow-sm transition-all">
+          <DialogTrigger nativeButton={true} render={
+            <Button className="w-full sm:w-auto bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg px-6 font-bold shadow-sm transition-all h-11">
               <Plus className="w-4 h-4 mr-2" />
               Tambah Produk
             </Button>
@@ -217,51 +217,53 @@ export function Products() {
             />
           </div>
         </div>
-        <Table>
-          <TableHeader className="bg-slate-50">
-            <TableRow className="hover:bg-transparent h-12">
-              <TableHead className="font-bold text-slate-600 text-xs pl-6">Produk</TableHead>
-              <TableHead className="font-bold text-slate-600 text-xs">SKU</TableHead>
-              <TableHead className="font-bold text-slate-600 text-xs">Kategori</TableHead>
-              <TableHead className="font-bold text-slate-600 text-xs">Barcode</TableHead>
-              <TableHead className="font-bold text-slate-600 text-xs text-right">Harga</TableHead>
-              <TableHead className="font-bold text-slate-600 text-xs text-right pr-6">Aksi</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading && <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400">Memuat data...</TableCell></TableRow>}
-            {!isLoading && filtered.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-20 text-slate-400">
-                  <Tag className="w-12 h-12 mx-auto text-slate-200 mb-3" />
-                  <p className="text-sm font-bold text-slate-600">Produk tidak ditemukan</p>
-                </TableCell>
+        <div className="overflow-x-auto">
+          <Table className="min-w-[800px]">
+            <TableHeader className="bg-slate-50">
+              <TableRow className="hover:bg-transparent h-12">
+                <TableHead className="font-bold text-slate-600 text-xs pl-6">Produk</TableHead>
+                <TableHead className="font-bold text-slate-600 text-xs">SKU</TableHead>
+                <TableHead className="font-bold text-slate-600 text-xs">Kategori</TableHead>
+                <TableHead className="font-bold text-slate-600 text-xs">Barcode</TableHead>
+                <TableHead className="font-bold text-slate-600 text-xs text-right">Harga</TableHead>
+                <TableHead className="font-bold text-slate-600 text-xs text-right pr-6">Aksi</TableHead>
               </TableRow>
-            )}
-            {filtered.map((item: any) => (
-              <TableRow key={item.id} className="h-16 group hover:bg-slate-50/50">
-                <TableCell className="font-bold text-slate-900 pl-6 text-sm">{item.name}</TableCell>
-                <TableCell className="text-xs font-medium text-[#0C4196] font-mono">{item.sku}</TableCell>
-                <TableCell className="text-sm text-slate-600">{categories?.find((c: any) => c.id === item.categoryId)?.name || '-'}</TableCell>
-                <TableCell className="text-xs font-mono text-slate-500">{item.barcode}</TableCell>
-                <TableCell className="text-right text-sm font-bold text-slate-900">Rp {item.price?.toLocaleString('id-ID') || 0}</TableCell>
-                <TableCell className="text-right pr-6">
-                  <div className="flex justify-end gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => setStickerProduct(item)} className="h-8 w-8 text-slate-400 hover:text-[#0C4196] hover:bg-white" title="Cetak Barcode">
-                      <Printer className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(item)} className="h-8 w-8 text-slate-400 hover:text-[#0C4196] hover:bg-white">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id, item.name)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {isLoading && <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400">Memuat data...</TableCell></TableRow>}
+              {!isLoading && filtered.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-20 text-slate-400">
+                    <Tag className="w-12 h-12 mx-auto text-slate-200 mb-3" />
+                    <p className="text-sm font-bold text-slate-600">Produk tidak ditemukan</p>
+                  </TableCell>
+                </TableRow>
+              )}
+              {filtered.map((item: any) => (
+                <TableRow key={item.id} className="h-16 group hover:bg-slate-50/50">
+                  <TableCell className="font-bold text-slate-900 pl-6 text-sm">{item.name}</TableCell>
+                  <TableCell className="text-xs font-medium text-[#0C4196] font-mono">{item.sku}</TableCell>
+                  <TableCell className="text-sm text-slate-600">{categories?.find((c: any) => c.id === item.categoryId)?.name || '-'}</TableCell>
+                  <TableCell className="text-xs font-mono text-slate-500">{item.barcode}</TableCell>
+                  <TableCell className="text-right text-sm font-bold text-slate-900">Rp {item.price?.toLocaleString('id-ID') || 0}</TableCell>
+                  <TableCell className="text-right pr-6">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => setStickerProduct(item)} className="h-8 w-8 text-slate-400 hover:text-[#0C4196] hover:bg-white" title="Cetak Barcode">
+                        <Printer className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(item)} className="h-8 w-8 text-slate-400 hover:text-[#0C4196] hover:bg-white">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id, item.name)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       <Dialog open={!!stickerProduct} onOpenChange={(open) => !open && setStickerProduct(null)}>

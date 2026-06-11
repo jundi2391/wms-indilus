@@ -1,0 +1,87 @@
+src/pages/Categories.tsx:    const q = query(collection(db, 'categories'));
+src/pages/Customers.tsx:    const q = query(collection(db, 'customers'));
+src/pages/Customers.tsx:        await addDoc(collection(db, 'customers'), { ...data, createdAt: Date.now() });
+src/pages/Dashboard.tsx:    const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
+src/pages/Dashboard.tsx:    const unsubCustomers = onSnapshot(collection(db, 'customers'), (snap) => {
+src/pages/Dashboard.tsx:    const unsubSuppliers = onSnapshot(collection(db, 'suppliers'), (snap) => {
+src/pages/Dashboard.tsx:    const unsubInbounds = onSnapshot(collection(db, 'inbounds'), (snap) => {
+src/pages/Dashboard.tsx:    const unsubDeliveries = onSnapshot(collection(db, 'delivery_orders'), (snap) => {
+src/pages/Dashboard.tsx:    const unsubInventory = onSnapshot(collection(db, 'inventory'), (snap) => {
+src/pages/Dashboard.tsx:    const qRecent = query(collection(db, 'inventory_transactions'), orderBy('createdAt', 'desc'), limit(10));
+src/pages/Dashboard.tsx:    const qTrend = query(collection(db, 'inventory_transactions'), where('createdAt', '>=', sevenDaysAgo), orderBy('createdAt', 'asc'));
+src/pages/Dashboard.tsx:      const snap = await getDocs(collection(db, 'inventory'));
+src/pages/Expeditions.tsx:    const q = query(collection(db, 'expeditions'));
+src/pages/Expeditions.tsx:        await addDoc(collection(db, 'expeditions'), { ...data, createdAt: Date.now() });
+src/pages/Inbound.tsx:    const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
+src/pages/Inbound.tsx:    const unsubWarehouses = onSnapshot(collection(db, 'warehouses'), (snap) => {
+src/pages/Inbound.tsx:    const unsubInbounds = onSnapshot(collection(db, 'inbounds'), (snap) => {
+src/pages/Inbound.tsx:    const unsubSuppliers = onSnapshot(collection(db, 'suppliers'), (snap) => {
+src/pages/Inbound.tsx:    const unsubOwners = onSnapshot(collection(db, 'owners'), (snap) => {
+src/pages/Inbound.tsx:    const unsubSupplyPos = onSnapshot(query(collection(db, 'supply_pos')), (snap) => {
+src/pages/Inbound.tsx:        const ledgerRef = doc(collection(db, 'inventory_ledgers'));
+src/pages/Inbound.tsx:      const inboundRef = doc(collection(db, 'inbounds'));
+src/pages/Inbound.tsx:          const ledgerRef = doc(collection(db, 'inventory_ledgers'));
+src/pages/Inbound.tsx:        const auditRef = doc(collection(db, 'audit_logs'));
+src/pages/Inventory.tsx:    const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
+src/pages/Inventory.tsx:    const unsubWarehouses = onSnapshot(collection(db, 'warehouses'), (snap) => {
+src/pages/Inventory.tsx:    const unsubOwners = onSnapshot(collection(db, 'owners'), (snap) => {
+src/pages/Inventory.tsx:    const q = query(collection(db, 'inventory'));
+src/pages/Inventory.tsx:          const ledgerRef = doc(collection(db, 'inventory_ledgers'));
+src/pages/Ledger.tsx:    const qLedger = query(collection(db, 'inventory_ledgers'));
+src/pages/Ledger.tsx:    const unsubP = onSnapshot(query(collection(db, 'products')), sn => setProducts(sn.docs.map(d => ({ id: d.id, ...d.data() }))));
+src/pages/Ledger.tsx:    const unsubO = onSnapshot(query(collection(db, 'owners')), sn => setOwners(sn.docs.map(d => ({ id: d.id, ...d.data() }))));
+src/pages/Ledger.tsx:    const unsubW = onSnapshot(query(collection(db, 'warehouses')), sn => setWarehouses(sn.docs.map(d => ({ id: d.id, ...d.data() }))));
+src/pages/Outbound.tsx:    const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
+src/pages/Outbound.tsx:    const unsubWarehouses = onSnapshot(collection(db, 'warehouses'), (snap) => {
+src/pages/Outbound.tsx:    const unsubCustomers = onSnapshot(collection(db, 'customers'), (snap) => {
+src/pages/Outbound.tsx:    const unsubDeliveries = onSnapshot(collection(db, 'delivery_orders'), (snap) => {
+src/pages/Outbound.tsx:    const unsubExpeditions = onSnapshot(collection(db, 'expeditions'), (snap) => {
+src/pages/Outbound.tsx:    const unsubOwners = onSnapshot(collection(db, 'owners'), (snap) => {
+src/pages/Outbound.tsx:    const unsubExecutors = onSnapshot(collection(db, 'project_executors'), (snap) => {
+src/pages/Outbound.tsx:    const unsubUnderlyingPos = onSnapshot(collection(db, 'underlying_pos'), (snap) => {
+src/pages/Outbound.tsx:      const deliveryRef = doc(collection(db, 'delivery_orders'));
+src/pages/Outbound.tsx:          const ledgerRef = doc(collection(db, 'inventory_ledgers'));
+src/pages/Outbound.tsx:        const auditRef = doc(collection(db, 'audit_logs'));
+src/pages/Owners.tsx:    const q = query(collection(db, 'owners'));
+src/pages/Owners.tsx:        await addDoc(collection(db, 'owners'), { ...data, createdAt: Date.now() });
+src/pages/Products.tsx:      const snap = await getDocs(collection(db, 'products'));
+src/pages/Products.tsx:      const snap = await getDocs(collection(db, 'categories'));
+src/pages/Products.tsx:        await addDoc(collection(db, 'products'), { ...payload, createdAt: Date.now() });
+src/pages/Products.tsx:      const q = query(collection(db, 'inventory'), where('productId', '==', id));
+src/pages/ProjectExecutors.tsx:    const q = query(collection(db, 'project_executors'));
+src/pages/ProjectExecutors.tsx:        await addDoc(collection(db, 'project_executors'), { ...data, createdAt: Date.now() });
+src/pages/Reports.tsx:    const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
+src/pages/Reports.tsx:    const unsubCategories = onSnapshot(collection(db, 'categories'), (snap) => {
+src/pages/Reports.tsx:    const unsubWarehouses = onSnapshot(collection(db, 'warehouses'), (snap) => {
+src/pages/Reports.tsx:    const unsubSuppliers = onSnapshot(collection(db, 'suppliers'), (snap) => {
+src/pages/Reports.tsx:    const unsubCustomers = onSnapshot(collection(db, 'customers'), (snap) => {
+src/pages/Reports.tsx:    const unsubExpeditions = onSnapshot(collection(db, 'expeditions'), (snap) => {
+src/pages/Reports.tsx:        const q = query(collection(db, 'inbounds'), where('createdAt', '>=', start), where('createdAt', '<=', end), orderBy('createdAt', 'desc'));
+src/pages/Reports.tsx:        const q = query(collection(db, 'delivery_orders'), where('createdAt', '>=', start), where('createdAt', '<=', end), orderBy('createdAt', 'desc'));
+src/pages/Reports.tsx:        const underlyingDocs = await getDocs(collection(db, 'underlying_pos'));
+src/pages/Reports.tsx:        const invSnap = await getDocs(collection(db, 'inventory'));
+src/pages/Settings.tsx:        const snap = await getDocs(collection(db, collName)).catch((e) => {
+src/pages/StockOpname.tsx:    const q = query(collection(db, 'stock_opnames'));
+src/pages/StockOpname.tsx:    const unsubWarehouses = onSnapshot(collection(db, 'warehouses'), (snap) => {
+src/pages/StockOpname.tsx:    const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
+src/pages/StockOpname.tsx:    const snap = await getDocs(collection(db, 'inventory'));
+src/pages/StockOpname.tsx:      const opnameRef = doc(collection(db, 'stock_opnames'));
+src/pages/StockOpname.tsx:          const txRef = doc(collection(db, 'inventory_transactions'));
+src/pages/Suppliers.tsx:    const q = query(collection(db, 'suppliers'));
+src/pages/Suppliers.tsx:        await addDoc(collection(db, 'suppliers'), { ...data, createdAt: Date.now() });
+src/pages/SupplyPOs.tsx:    const unsubPos = onSnapshot(query(collection(db, 'supply_pos')), sn => setPos(sn.docs.map(d => ({ id: d.id, ...d.data() }))));
+src/pages/SupplyPOs.tsx:    const unsubUpos = onSnapshot(query(collection(db, 'underlying_pos')), sn => setUnderlyingPos(sn.docs.map(d => ({ id: d.id, ...d.data() }))));
+src/pages/SupplyPOs.tsx:    const unsubOwn = onSnapshot(query(collection(db, 'owners')), sn => setOwners(sn.docs.map(d => ({ id: d.id, ...d.data() }))));
+src/pages/SupplyPOs.tsx:    const unsubWh = onSnapshot(query(collection(db, 'warehouses')), sn => setWarehouses(sn.docs.map(d => ({ id: d.id, ...d.data() }))));
+src/pages/SupplyPOs.tsx:      const docRef = await addDoc(collection(db, 'supply_pos'), { 
+src/pages/SupplyPOs.tsx:      addDoc(collection(db, 'audit_logs'), {
+src/pages/UnderlyingPOs.tsx:    const qPOs = query(collection(db, 'underlying_pos'));
+src/pages/UnderlyingPOs.tsx:    const qOwn = query(collection(db, 'owners'));
+src/pages/UnderlyingPOs.tsx:    const qExe = query(collection(db, 'project_executors'));
+src/pages/UnderlyingPOs.tsx:    const qCust = query(collection(db, 'customers'));
+src/pages/UnderlyingPOs.tsx:        addDoc(collection(db, 'audit_logs'), {
+src/pages/UnderlyingPOs.tsx:        const poRef = await addDoc(collection(db, 'underlying_pos'), { 
+src/pages/UnderlyingPOs.tsx:        addDoc(collection(db, 'audit_logs'), {
+src/pages/UnderlyingPOs.tsx:      addDoc(collection(db, 'audit_logs'), {
+src/pages/Warehouses.tsx:    const q = query(collection(db, 'warehouses'));
+src/pages/Warehouses.tsx:    const unsubscribeInv = onSnapshot(collection(db, 'inventory'), (snapshot) => {
