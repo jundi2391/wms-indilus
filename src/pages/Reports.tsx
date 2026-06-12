@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileDown, Calendar, Filter, Loader2, Download, Table as TableIcon, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
+import { FileDown, Calendar, Filter, Loader2, Download, Table as TableIcon, ArrowDownToLine, ArrowUpFromLine, Activity } from 'lucide-react';
 import { collection, onSnapshot, query, where, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
@@ -49,7 +49,7 @@ export function Reports() {
     };
   }, []);
 
-  const exportToExcel = async (reportType: 'inbound' | 'outbound' | 'inventory') => {
+  const exportToExcel = async (reportType: 'inbound' | 'outbound' | 'inventory' | 'ledger') => {
     setLoading(true);
     try {
       const start = startOfMonth(parseISO(selectedMonth + '-01')).getTime();
@@ -139,15 +139,45 @@ export function Reports() {
             'Nama Produk': product?.name || 'Produk Tidak Diketahui',
             'Kategori': categories.find(c => c.id === product?.categoryId)?.name || '-',
             'Gudang': warehouse,
-            'Stok Tersedia (Available)': d.availableQty || 0,
-            'Stok Dipesan (Reserved)': d.reservedQty || 0,
-            'Stok Rusak/Refund (Damaged)': d.damagedQty || 0,
-            'Total Stok (On Hand)': (d.availableQty || 0) + (d.reservedQty || 0) + (d.damagedQty || 0),
+            'On Hand': d.onHandQty || 0,
+            'Damaged': d.damagedQty || 0,
+            'Total Stock': (d.onHandQty || 0) + (d.damagedQty || 0),
             'Satuan': product?.unit || 'Pcs',
             'Minimum Stok': product?.minStock || 0
           };
         });
         filename = `Laporan_Inventaris_Lengkap_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+      } else if (reportType === 'ledger') {
+        const q = query(collection(db, 'inventory_ledgers'), where('createdAt', '>=', start), where('createdAt', '<=', end), orderBy('createdAt', 'desc'));
+        const snap = await getDocs(q);
+        
+        data = snap.docs.map(doc => {
+          const d = doc.data();
+          const product = products.find(p => p.id === d.productId);
+          const warehouse = warehouses.find(w => w.id === d.warehouseId)?.name || 'Gudang Umum';
+          
+          let actionLabel = 'Penyesuaian';
+          if (d.transactionType === 'INBOUND_RECEIVE') actionLabel = 'Inbound (Masuk)';
+          if (d.transactionType === 'OUTBOUND_SEND') actionLabel = 'Outbound (Keluar)';
+          if (d.transactionType === 'OUTBOUND_DAMAGE') actionLabel = `Retur/Rusak (${d.category || '-'})`;
+          if (d.transactionType === 'MANUAL_ADD') actionLabel = 'Koreksi (+)';
+          if (d.transactionType === 'MANUAL_DEDUCT') actionLabel = 'Koreksi (-)';
+          if (d.transactionType === 'MANUAL_MARK_DAMAGED') actionLabel = 'Set Rusak/Damaged';
+
+          return {
+            'Waktu': format(d.createdAt, 'dd-MM-yyyy HH:mm:ss'),
+            'Jenis Transaksi': actionLabel,
+            'SKU': product?.sku || '-',
+            'Nama Produk': product?.name || 'Produk Tidak Diketahui',
+            'Gudang': warehouse,
+            'Detail Ref': d.referenceType ? `${d.referenceType} (${d.referenceId || '-'})` : '-',
+            'Qty Sebelum': d.qtyBefore || 0,
+            'Perubahan (+/-)': d.qtyChange || 0,
+            'Qty Sesudah': d.qtyAfter || 0,
+            'Catatan': d.notes || '-'
+          };
+        });
+        filename = `Laporan_Pergerakan_Stok_Retur_${selectedMonth}.xlsx`;
       }
 
       if (data.length === 0) {
@@ -194,7 +224,7 @@ export function Reports() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="border-slate-200 shadow-sm rounded-3xl overflow-hidden hover:border-blue-200 transition-all group">
           <CardHeader className="bg-slate-50/50">
             <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mb-2">
@@ -226,6 +256,26 @@ export function Reports() {
             <p className="text-sm text-slate-500 mb-6">Laporan detail semua pengiriman barang dan DO dalam periode terpilih.</p>
             <button 
               onClick={() => exportToExcel('outbound')}
+              disabled={loading}
+              className="w-full h-11 bg-[#0C4196] hover:bg-[#093175] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              Unduh Excel
+            </button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-sm rounded-3xl overflow-hidden hover:border-blue-200 transition-all group">
+          <CardHeader className="bg-slate-50/50">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center mb-2">
+              <Activity className="w-5 h-5 text-rose-600" />
+            </div>
+            <CardTitle className="text-lg font-bold text-slate-800">Mutasi & Retur</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <p className="text-sm text-slate-500 mb-6">Laporan pergerakan stok, penyesuaian (adjustment), damage, dan retur.</p>
+            <button 
+              onClick={() => exportToExcel('ledger')}
               disabled={loading}
               className="w-full h-11 bg-[#0C4196] hover:bg-[#093175] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50"
             >

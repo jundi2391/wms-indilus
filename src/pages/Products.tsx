@@ -49,7 +49,6 @@ export function Products() {
       categoryId: fd.get('categoryId') || '',
       unit: fd.get('unit'),
       weight: Number(fd.get('weight')),
-      price: Number(fd.get('price')),
       status: 'Active',
       updatedAt: Date.now()
     };
@@ -173,10 +172,6 @@ export function Products() {
                       <Input name="weight" type="number" step="0.01" required placeholder="0.5" className="h-10 rounded-lg" defaultValue={editProduct?.weight} />
                     </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-600 uppercase">Harga (Rp)</Label>
-                    <Input name="price" type="number" required placeholder="10000" className="h-10 rounded-lg" defaultValue={editProduct?.price} />
-                  </div>
                 </div>
                 
                 <div className="bg-slate-50 rounded-xl p-6 flex flex-col items-center justify-center border border-dashed border-slate-200">
@@ -226,7 +221,6 @@ export function Products() {
                 <TableHead className="font-bold text-slate-600 text-xs">SKU</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs">Kategori</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs">Barcode</TableHead>
-                <TableHead className="font-bold text-slate-600 text-xs text-right">Harga</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs text-right pr-6">Aksi</TableHead>
               </TableRow>
             </TableHeader>
@@ -245,9 +239,6 @@ export function Products() {
                     </TableCell>
                     <TableCell>
                       <Skeleton className="h-4 w-28" />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Skeleton className="h-4 w-20 ml-auto" />
                     </TableCell>
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-2">
@@ -272,7 +263,6 @@ export function Products() {
                     <TableCell className="text-xs font-medium text-[#0C4196] font-mono">{item.sku}</TableCell>
                     <TableCell className="text-sm text-slate-600">{categories?.find((c: any) => c.id === item.categoryId)?.name || '-'}</TableCell>
                     <TableCell className="text-xs font-mono text-slate-500">{item.barcode}</TableCell>
-                    <TableCell className="text-right text-sm font-bold text-slate-900">Rp {item.price?.toLocaleString('id-ID') || 0}</TableCell>
                     <TableCell className="text-right pr-6">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" onClick={() => setStickerProduct(item)} className="h-8 w-8 text-slate-400 hover:text-[#0C4196] hover:bg-white" title="Cetak Barcode">

@@ -56,7 +56,7 @@ export function Warehouses() {
   const getWarehouseTotal = (whId: string) => {
     return inventory
       .filter(item => item.warehouseId === whId)
-      .reduce((acc, curr) => acc + (curr.availableQty || 0), 0);
+      .reduce((acc, curr) => acc + (curr.onHandQty || 0) + (curr.damagedQty || 0), 0);
   };
 
   const getDistinctProducts = (whId: string) => {

@@ -153,11 +153,16 @@ export function Returns() {
 
         const currentOnHand = invSnap.exists() ? (Number(invSnap.data().onHandQty) || 0) : 0;
         const currentDamaged = invSnap.exists() ? (Number(invSnap.data().damagedQty) || 0) : 0;
-        const currentReserved = invSnap.exists() ? (Number(invSnap.data().reservedQty) || 0) : 0;
 
-        const newOnHand = Math.max(0, currentOnHand - ret.qty);
-        const newDamaged = Math.max(0, currentDamaged - ret.qty);
-        const newAvailable = newOnHand - currentReserved - newDamaged;
+        let newOnHand = currentOnHand;
+        let newDamaged = currentDamaged;
+        
+        // Both "Returned" and "Damaged" refer to defective items being taken out of stock.
+        // Therefore, deleting the report restores On Hand and removes Damaged.
+        newOnHand = currentOnHand + ret.qty;
+        newDamaged = Math.max(0, currentDamaged - ret.qty);
+        
+        const newAvailable = newOnHand;
 
         transaction.set(invRef, {
           onHandQty: newOnHand,
@@ -230,7 +235,16 @@ export function Returns() {
         
         let currentOnHand = invSnap.exists() ? (Number(invSnap.data().onHandQty) || 0) : 0;
         let currentDamaged = invSnap.exists() ? (Number(invSnap.data().damagedQty) || 0) : 0;
-        let currentReserved = invSnap.exists() ? (Number(invSnap.data().reservedQty) || 0) : 0;
+
+        // Update inventory (Status stock menjadi Damaged/Returned)
+        // Both "Returned" and "Damaged" behave identically: they refer to items that are broken.
+        // Therefore, we subtract from On Hand (if it was returned into warehouse manually, or if it was discovered broken).
+        // It's a write-off from OnHand and an increase in Damaged, leading to a negative ledger change.
+        let newOnHand = Math.max(0, currentOnHand - qty);
+        let newDamaged = currentDamaged + qty;
+        let ledgerQtyChange = -qty;
+        
+        const newAvailable = newOnHand; // availableQty equals onHandQty
 
         const ledgerRef = doc(collection(db, 'inventory_ledgers'));
         const returnNo = customReturnNumber || (category === 'Returned' ? 'RET-' : 'DAM-') + Date.now();
@@ -242,7 +256,9 @@ export function Returns() {
           productId,
           ownerId: selectedDeli.ownerId,
           warehouseId: selectedDeli.warehouseId,
-          qtyChange: qty,
+          qtyBefore: currentOnHand,
+          qtyChange: ledgerQtyChange,
+          qtyAfter: newOnHand,
           referenceType: 'DELIVERY_ORDER',
           referenceId: selectedDeli.id,
           category,
@@ -277,11 +293,6 @@ export function Returns() {
           createdAt: Date.now(),
           createdBy: appUser?.uid
         });
-
-        // Update inventory (Status stock menjadi Damaged/Returned)
-        const newOnHand = currentOnHand + qty;
-        const newDamaged = currentDamaged + qty;
-        const newAvailable = newOnHand - currentReserved - newDamaged; // availableQty calculation
 
         transaction.set(invRef, {
           onHandQty: newOnHand,

@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, writeBatch, runTransaction, onSnapshot } from 'firebase/firestore';
 import { toast } from 'sonner';
-import { ScanBarcode, Send, Eye, ArrowUpFromLine, Trash2 } from 'lucide-react';
+import { ScanBarcode, Send, Eye, ArrowUpFromLine, Trash2, Package } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,6 +19,8 @@ import { format } from 'date-fns';
 export function Outbound() {
   const { appUser } = useAuthStore();
   const [scannedBarcode, setScannedBarcode] = useState('');
+  const [scanMode, setScanMode] = useState<'burst' | 'box'>('burst');
+  const [scannedProductForBox, setScannedProductForBox] = useState<any>(null);
   const [selectedWHId, setSelectedWHId] = useState('');
   const [items, setItems] = useState<any[]>([]);
   const scannerRef = useRef<HTMLInputElement>(null);
@@ -105,14 +107,18 @@ export function Outbound() {
     const matchedProduct = products.find((p: any) => p.barcode === scannedBarcode);
     
     if (matchedProduct) {
-      setItems(prev => {
-        const existing = prev.find(i => i.product.id === matchedProduct.id);
-        if (existing) {
-          return prev.map(i => i.product.id === matchedProduct.id ? { ...i, qty: i.qty + 1 } : i);
-        }
-        return [...prev, { product: matchedProduct, qty: 1 }];
-      });
-      toast.success(`Scanned Out: ${matchedProduct.name}`);
+      if (scanMode === 'box') {
+         setScannedProductForBox(matchedProduct);
+      } else {
+        setItems(prev => {
+          const existing = prev.find(i => i.product.id === matchedProduct.id);
+          if (existing) {
+            return prev.map(i => i.product.id === matchedProduct.id ? { ...i, qty: i.qty + 1 } : i);
+          }
+          return [...prev, { product: matchedProduct, qty: 1 }];
+        });
+        toast.success(`Scanned Out: ${matchedProduct.name}`);
+      }
     } else {
       toast.error('Product not found: ' + scannedBarcode);
     }
@@ -453,15 +459,14 @@ export function Outbound() {
           const ownerName = owners.find(o => o.id === ownerId)?.name || ownerId;
 
           if (!invDoc.exists()) {
-              throw new Error(`Record inventory tidak ditemukan untuk [${ownerName}] di [${whName}] untuk produk [${item.product.name}]. Pastikan stok sudah di-Inbound atau di-Allocation ke gudang ini.`);
+              throw new Error(`Record inventory tidak ditemukan untuk [${ownerName}] di [${whName}] untuk produk [${item.product.name}]. Pastikan stok sudah di-Inbound ke gudang ini.`);
           }
           
-          const reservedQty = Number(invDoc.data().reservedQty) || 0;
-          const availableQty = Number(invDoc.data().availableQty) || 0;
-          const effectiveStock = reservedQty + availableQty;
+          const onHand = Number(invDoc.data().onHandQty) || 0;
+          const effectiveStock = onHand;
 
           if (effectiveStock < item.qty) {
-            throw new Error(`Stok tidak cukup di ${whName} untuk ${item.product.name}. Total Tersedia (Available+Reserved): ${effectiveStock}, Diminta: ${item.qty}.`);
+            throw new Error(`Stok tidak cukup di ${whName} untuk ${item.product.name}. Total Tersedia: ${effectiveStock}, Diminta: ${item.qty}.`);
           }
         });
 
@@ -488,20 +493,13 @@ export function Outbound() {
           const invDoc = invDocs[index];
           
           const currentOH = Number(invDoc.data().onHandQty) || 0;
-          const currentReserved = Number(invDoc.data().reservedQty) || 0;
-          const currentAvailable = Number(invDoc.data().availableQty) || 0;
-
-          // Consume from Reserved first, then Available
-          const toDeductFromReserved = Math.min(currentReserved, item.qty);
-          const toDeductFromAvailable = item.qty - toDeductFromReserved;
+          const currentDamaged = Number(invDoc.data().damagedQty) || 0;
 
           const newOH = currentOH - item.qty;
-          const newReserved = Math.max(0, currentReserved - toDeductFromReserved);
-          const newAvailable = Math.max(0, currentAvailable - toDeductFromAvailable);
+          const newAvailable = newOH;
 
           transaction.update(invRef, {
             onHandQty: newOH,
-            reservedQty: newReserved,
             availableQty: newAvailable,
             updatedAt: now
           });
@@ -621,7 +619,25 @@ export function Outbound() {
                 ) : (
                   <>
                     <form onSubmit={handleScan} className="space-y-3 mb-8">
-                      <Label className="text-xs font-bold text-slate-600 uppercase">Scan Barcode Produk</Label>
+                      <div className="flex justify-between items-center mb-1">
+                        <Label className="text-xs font-bold text-slate-600 uppercase">Scan Barcode Produk</Label>
+                        <div className="flex gap-1.5 items-center bg-slate-100 p-1 rounded-lg">
+                          <button 
+                            type="button" 
+                            onClick={() => setScanMode('burst')}
+                            className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${scanMode === 'burst' ? 'bg-white text-[#0C4196] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            Burst
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => setScanMode('box')}
+                            className={`px-3 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${scanMode === 'box' ? 'bg-white text-[#0C4196] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                          >
+                            Box
+                          </button>
+                        </div>
+                      </div>
                       <Input
                         ref={scannerRef}
                         autoFocus
@@ -1034,6 +1050,63 @@ export function Outbound() {
         </TabsContent>
       </Tabs>
 
+      <Dialog open={!!scannedProductForBox} onOpenChange={(open) => {
+         if (!open) {
+           setScannedProductForBox(null);
+           setTimeout(() => scannerRef.current?.focus(), 100);
+         }
+      }}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-900">Input Kuantitas (Box Mode)</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 flex items-center gap-4">
+               <div className="w-12 h-12 bg-white rounded-lg border border-slate-200 flex items-center justify-center shrink-0">
+                 <Package className="w-6 h-6 text-[#0C4196]" />
+               </div>
+               <div>
+                  <h4 className="font-bold text-slate-900 text-lg">{scannedProductForBox?.name}</h4>
+                  <p className="text-sm font-mono text-slate-500">{scannedProductForBox?.sku}</p>
+               </div>
+            </div>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const qty = parseInt(formData.get('qty') as string, 10);
+              if (qty > 0) {
+                setItems(prev => {
+                  const existing = prev.find(i => i.product.id === scannedProductForBox.id);
+                  if (existing) {
+                    return prev.map(i => i.product.id === scannedProductForBox.id ? { ...i, qty: i.qty + qty } : i);
+                  }
+                  return [...prev, { product: scannedProductForBox, qty }];
+                });
+                toast.success(`Berhasil menambahkan ${qty} unit ${scannedProductForBox.name}`);
+                setScannedProductForBox(null);
+                setTimeout(() => scannerRef.current?.focus(), 100);
+              }
+            }}>
+              <div className="space-y-2 mb-6">
+                <Label className="text-xs font-bold text-slate-600 uppercase">Kuantitas</Label>
+                <Input 
+                  name="qty" 
+                  type="number" 
+                  autoFocus 
+                  min={1} 
+                  required 
+                  defaultValue={1} 
+                  className="h-12 text-lg font-bold" 
+                />
+              </div>
+              <Button type="submit" className="w-full h-12 bg-[#0C4196] hover:bg-[#093175] text-white rounded-xl font-bold">
+                Tambahkan ke Daftar
+              </Button>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Damage Report Dialog */}
       <Dialog open={isDamageDialogOpen} onOpenChange={setIsDamageDialogOpen}>
         <DialogContent className="max-w-2xl">
@@ -1071,6 +1144,15 @@ export function Outbound() {
               try {
                 const now = Date.now();
                 await runTransaction(db, async (transaction) => {
+                  // Must read inventory state first
+                  const invId = `${damageTarget.ownerId}_${damageTarget.warehouseId}_${productId}`;
+                  const invRef = doc(db, 'inventory', invId);
+                  const invSnap = await transaction.get(invRef);
+                  
+                  let currentOnHand = invSnap.exists() ? (Number(invSnap.data().onHandQty) || 0) : 0;
+                  let currentDamaged = invSnap.exists() ? (Number(invSnap.data().damagedQty) || 0) : 0;
+                  let currentAvailable = invSnap.exists() ? (Number(invSnap.data().availableQty) || 0) : 0;
+
                   const ledgerRef = doc(collection(db, 'inventory_ledgers'));
                   const returnNo = (category === 'Returned' ? 'RET-' : 'DAM-') + now;
                   
@@ -1080,7 +1162,9 @@ export function Outbound() {
                     productId,
                     ownerId: damageTarget.ownerId,
                     warehouseId: damageTarget.warehouseId,
-                    qtyChange: damagedQty,
+                    qtyBefore: currentOnHand,
+                    qtyChange: -damagedQty,
+                    qtyAfter: Math.max(0, currentOnHand - damagedQty),
                     referenceType: 'DELIVERY_ORDER',
                     referenceId: damageTarget.id,
                     notes: `Category: ${category}. ${desc}`,
@@ -1115,18 +1199,9 @@ export function Outbound() {
                   });
 
                   // Update inventory (Status stock menjadi damaged)
-                  const invId = `${damageTarget.ownerId}_${damageTarget.warehouseId}_${productId}`;
-                  const invRef = doc(db, 'inventory', invId);
-                  const invSnap = await transaction.get(invRef);
-                  
-                  let currentOnHand = invSnap.exists() ? (Number(invSnap.data().onHandQty) || 0) : 0;
-                  let currentDamaged = invSnap.exists() ? (Number(invSnap.data().damagedQty) || 0) : 0;
-                  let currentAvailable = invSnap.exists() ? (Number(invSnap.data().availableQty) || 0) : 0;
-                  let currentReserved = invSnap.exists() ? (Number(invSnap.data().reservedQty) || 0) : 0;
-
-                  const newOnHand = currentOnHand + damagedQty;
+                  const newOnHand = Math.max(0, currentOnHand - damagedQty);
                   const newDamaged = currentDamaged + damagedQty;
-                  const newAvailable = newOnHand - currentReserved - newDamaged; // availableQty stays unchanged
+                  const newAvailable = newOnHand; // availableQty equals onHandQty
 
                   transaction.set(invRef, {
                     onHandQty: newOnHand,
@@ -1145,7 +1220,7 @@ export function Outbound() {
                   });
                 });
 
-                toast.success('Laporan kerusakan berhasil disimpan. Stok Damaged & On Hand ditambah.');
+                toast.success('Laporan kerusakan berhasil disimpan. Stok Damaged dicatat.');
                 setIsDamageDialogOpen(false);
                 setDamageTarget(null);
                 setDamageForm({ productId: '', qty: 0 });

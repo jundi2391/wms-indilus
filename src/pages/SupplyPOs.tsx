@@ -120,48 +120,6 @@ export function SupplyPOs() {
     
     try {
       await runTransaction(db, async (transaction) => {
-        // Read inventory for all items
-        const invUpdates: any[] = [];
-        for (const item of itemsToAllocate) {
-          const invId = `${selectedUPO.ownerId}_${warehouseId}_${item.productId}`;
-          const invRef = doc(db, 'inventory', invId);
-          const invSnap = await transaction.get(invRef);
-          
-          let currentAvailable = invSnap.exists() ? (Number(invSnap.data().availableQty) || 0) : 0;
-          let currentReserved = invSnap.exists() ? (Number(invSnap.data().reservedQty) || 0) : 0;
-          let currentOnHand = invSnap.exists() ? (Number(invSnap.data().onHandQty) || 0) : 0;
-
-          if (currentAvailable < item.qty) {
-            throw new Error(`Stok tersedia tidak cukup untuk ${item.name}. Tersedia: ${currentAvailable}, Diminta: ${item.qty}`);
-          }
-
-          const newAvailable = currentAvailable - item.qty;
-          const newReserved = currentReserved + item.qty;
-
-          invUpdates.push({
-            ref: invRef,
-            exists: invSnap.exists(),
-            data: {
-              availableQty: newAvailable,
-              reservedQty: newReserved,
-              ownerId: selectedUPO.ownerId,
-              warehouseId: warehouseId,
-              productId: item.productId,
-              updatedAt: now,
-              onHandQty: currentOnHand
-            }
-          });
-        }
-
-        // Apply updates
-        for (const up of invUpdates) {
-          if (up.exists) {
-            transaction.update(up.ref, up.data);
-          } else {
-            transaction.set(up.ref, { ...up.data, damagedQty: 0 });
-          }
-        }
-
         // Create Vendor PO (Verified)
         const spoRef = doc(collection(db, 'supply_pos'));
         transaction.set(spoRef, {
@@ -182,19 +140,19 @@ export function SupplyPOs() {
         const auditRef = doc(collection(db, 'audit_logs'));
         transaction.set(auditRef, {
             user: appUser?.name || 'Unknown',
-            action: 'Vendor PO Created & Verified (Auto-Reserved)',
+            action: 'Vendor PO Created & Verified',
             module: 'Vendor PO',
             recordId: spoRef.id,
             timestamp: now
         });
       });
 
-      toast.success('Vendor PO dibuat & Stok otomatis direservasi');
+      toast.success('Vendor PO berhasil dibuat');
       setIsOpen(false);
       setSelectedUPOId('');
     } catch (error: any) {
       console.error(error);
-      toast.error('Gagal membuat alokasi: ' + error.message);
+      toast.error('Gagal membuat pengadaan: ' + error.message);
     }
   };
 
@@ -207,47 +165,9 @@ export function SupplyPOs() {
       return;
     }
 
-    const loadingToast = toast.loading('Memproses verifikasi & reservasi stok...');
+    const loadingToast = toast.loading('Memproses verifikasi...');
     try {
       await runTransaction(db, async (transaction) => {
-        // Read inventory for all items
-        const invUpdates: any[] = [];
-        for (const item of items) {
-          const invId = `${po.ownerId}_${po.warehouseId}_${item.productId}`;
-          const invRef = doc(db, 'inventory', invId);
-          const invSnap = await transaction.get(invRef);
-          
-          let currentAvailable = invSnap.exists() ? (Number(invSnap.data().availableQty) || 0) : 0;
-          let currentReserved = invSnap.exists() ? (Number(invSnap.data().reservedQty) || 0) : 0;
-          let currentOnHand = invSnap.exists() ? (Number(invSnap.data().onHandQty) || 0) : 0;
-
-          const newAvailable = currentAvailable - item.qty;
-          const newReserved = currentReserved + item.qty;
-
-          invUpdates.push({
-            ref: invRef,
-            exists: invSnap.exists(),
-            data: {
-              availableQty: newAvailable,
-              reservedQty: newReserved,
-              ownerId: po.ownerId,
-              warehouseId: po.warehouseId,
-              productId: item.productId,
-              updatedAt: Date.now(),
-              onHandQty: currentOnHand
-            }
-          });
-        }
-
-        // Apply updates
-        for (const up of invUpdates) {
-          if (up.exists) {
-            transaction.update(up.ref, up.data);
-          } else {
-            transaction.set(up.ref, { ...up.data, damagedQty: 0 });
-          }
-        }
-
         // Update PO status
         transaction.update(doc(db, 'supply_pos', po.id), {
           status: 'Verified',
@@ -259,7 +179,7 @@ export function SupplyPOs() {
         const auditRef = doc(collection(db, 'audit_logs'));
         transaction.set(auditRef, {
             user: appUser?.name || 'Unknown',
-            action: 'Vendor PO Verified (Reservation Created)',
+            action: 'Vendor PO Verified',
             module: 'Vendor PO',
             recordId: po.id,
             timestamp: Date.now()
@@ -267,7 +187,7 @@ export function SupplyPOs() {
       });
 
       toast.dismiss(loadingToast);
-      toast.success('Vendor PO diverifikasi & Stok direservasi');
+      toast.success('Vendor PO diverifikasi');
     } catch (err: any) {
       console.error('Verify error:', err);
       toast.dismiss(loadingToast);
@@ -300,29 +220,9 @@ export function SupplyPOs() {
       return;
     }
 
-    const loadingToast = toast.loading('Menghapus data & mengembalikan reservasi stok...');
+    const loadingToast = toast.loading('Menghapus data pengadaan...');
     try {
       await runTransaction(db, async (transaction) => {
-        // If PO was Verified or Sent, it has reservations that must be restored.
-        if (po.status === 'Verified' || po.status === 'Sent') {
-          for (const item of (po.items || [])) {
-            const invId = `${po.ownerId}_${po.warehouseId}_${item.productId}`;
-            const invRef = doc(db, 'inventory', invId);
-            const invSnap = await transaction.get(invRef);
-            
-            if (invSnap.exists()) {
-              const currentAvailable = Number(invSnap.data().availableQty) || 0;
-              const currentReserved = Number(invSnap.data().reservedQty) || 0;
-              
-              transaction.update(invRef, {
-                availableQty: currentAvailable + item.qty,
-                reservedQty: Math.max(0, currentReserved - item.qty),
-                updatedAt: Date.now()
-              });
-            }
-          }
-        }
-        
         // Delete the PO
         transaction.delete(doc(db, 'supply_pos', po.id));
 
@@ -330,7 +230,7 @@ export function SupplyPOs() {
         const auditRef = doc(collection(db, 'audit_logs'));
         transaction.set(auditRef, {
             user: appUser?.name || 'Unknown',
-            action: `Vendor PO Deleted (Status: ${po.status}${po.status !== 'Draft' ? ', Stock Restored' : ''})`,
+            action: `Vendor PO Deleted (Status: ${po.status})`,
             module: 'Vendor PO',
             recordId: po.id,
             timestamp: Date.now()
@@ -338,7 +238,7 @@ export function SupplyPOs() {
       });
 
       toast.dismiss(loadingToast);
-      toast.success('Vendor PO dihapus & Reservasi dikembalikan');
+      toast.success('Vendor PO dihapus');
     } catch(err: any) {
       console.error('Delete error:', err);
       toast.dismiss(loadingToast);

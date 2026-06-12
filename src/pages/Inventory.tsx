@@ -29,7 +29,6 @@ export function Inventory() {
   const [productFilter, setProductFilter] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [supplyPos, setSupplyPos] = useState<any[]>([]);
-  const [viewingReservation, setViewingReservation] = useState<any>(null);
 
   useEffect(() => {
     let count = 0;
@@ -111,13 +110,11 @@ export function Inventory() {
           
           let currentOnHand = 0;
           let currentAvailable = 0;
-          let currentReserved = 0;
           let currentDamaged = 0;
 
           if (invSnap.exists()) {
             currentOnHand = Number(invSnap.data().onHandQty) || 0;
             currentAvailable = Number(invSnap.data().availableQty) || 0;
-            currentReserved = Number(invSnap.data().reservedQty) || 0;
             currentDamaged = Number(invSnap.data().damagedQty) || 0;
           }
 
@@ -130,14 +127,15 @@ export function Inventory() {
              newOnHand -= inputQty;
              if (newOnHand < 0) throw new Error('Stok tidak dapat dikurangi di bawah 0');
           } else if (adjustType === 'mark_damaged') {
+             newOnHand -= inputQty;
              newDamaged += inputQty;
-             if (newDamaged + currentReserved > currentOnHand) {
-               throw new Error('Jumlah rusak melebihi stok yang tersedia (On Hand - Reserved)');
+             if (newOnHand < 0) {
+               throw new Error('Jumlah rusak melebihi stok On Hand');
              }
           }
 
-          // Recalculate Available: On Hand - Reserved - Damaged
-          const newAvailable = newOnHand - currentReserved - newDamaged;
+          // Recalculate Available: always equals On Hand because Damaged is excluded from On Hand
+          const newAvailable = newOnHand;
           if (newAvailable < 0) {
             throw new Error('Penyesuaian gagal: Stok tersedia tidak bisa negatif');
           }
@@ -157,7 +155,6 @@ export function Inventory() {
               productId,
               onHandQty: newOnHand,
               availableQty: newAvailable,
-              reservedQty: 0,
               returnQty: 0,
               damagedQty: newDamaged,
               updatedAt: now
@@ -173,9 +170,9 @@ export function Inventory() {
             ownerId,
             warehouseId,
             productId,
-            qtyBefore: adjustType === 'mark_damaged' ? currentDamaged : currentOnHand,
-            qtyChange: inputQty,
-            qtyAfter: adjustType === 'mark_damaged' ? newDamaged : newOnHand,
+            qtyBefore: currentOnHand,
+            qtyChange: adjustType === 'add' ? inputQty : -inputQty,
+            qtyAfter: newOnHand,
             createdBy: 'manual', 
             createdAt: now
           });
@@ -310,11 +307,9 @@ export function Inventory() {
                 <TableHead className="font-bold text-slate-600 text-xs">SKU</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs">Owner & Gudang</TableHead>
                 <TableHead className="text-right font-bold text-slate-600 text-xs">On Hand</TableHead>
-                <TableHead className="text-right font-bold text-slate-600 text-xs">Reserved</TableHead>
                 <TableHead className="text-right font-bold text-slate-600 text-xs">Damaged</TableHead>
-                <TableHead className="text-right font-bold text-slate-600 text-xs pr-6">
-                  {isSuperAdmin ? 'Aksi' : 'Available'}
-                </TableHead>
+                <TableHead className="text-right font-bold text-slate-600 text-xs">Total Stock</TableHead>
+                {isSuperAdmin && <TableHead className="text-right font-bold text-slate-600 text-xs pr-6">Aksi</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -342,17 +337,16 @@ export function Inventory() {
                     <TableCell className="text-right">
                       <Skeleton className="h-4 w-10 ml-auto" />
                     </TableCell>
-                    <TableCell className="text-right pr-6">
-                      <div className="flex justify-end gap-3 items-center">
-                        <Skeleton className="h-4 w-12" />
-                        {isSuperAdmin && <Skeleton className="h-8 w-8 rounded-lg" />}
-                      </div>
-                    </TableCell>
+                    {isSuperAdmin && (
+                      <TableCell className="text-right pr-6">
+                        <Skeleton className="h-8 w-8 rounded-lg ml-auto" />
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               ) : filteredInventory.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isSuperAdmin ? 8 : 7} className="text-center py-20 text-slate-400">
+                  <TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-20 text-slate-400">
                     <Package className="w-12 h-12 mx-auto text-slate-200 mb-3" />
                     <p className="text-sm font-bold text-slate-600">Tidak ada data ditemukan</p>
                   </TableCell>
@@ -369,30 +363,15 @@ export function Inventory() {
                     <TableCell className="text-right font-medium text-slate-600 text-sm">
                       {inv.onHandQty}
                     </TableCell>
-                    <TableCell className="text-right font-medium text-orange-600 text-sm">
-                      <div className="flex items-center justify-end gap-1.5">
-                         {inv.reservedQty > 0 && (
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              onClick={() => setViewingReservation(inv)}
-                              className="h-6 w-6 text-orange-400 hover:text-orange-600 hover:bg-orange-50"
-                            >
-                               <Info className="w-3 h-3" />
-                            </Button>
-                         )}
-                         {inv.reservedQty}
-                      </div>
-                    </TableCell>
                     <TableCell className="text-right font-medium text-red-600 text-sm">
                       {inv.damagedQty}
                     </TableCell>
-                    <TableCell className="text-right pr-6">
-                      <div className="flex items-center justify-end gap-3">
-                        <span className="font-bold text-sm text-[#0C4196]">
-                          {Math.max(0, inv.availableQty)}
-                        </span>
-                        {isSuperAdmin && (
+                    <TableCell className="text-right font-bold text-sm text-[#0C4196]">
+                      {(inv.onHandQty || 0) + (inv.damagedQty || 0)}
+                    </TableCell>
+                    {isSuperAdmin && (
+                      <TableCell className="text-right pr-6">
+                        <div className="flex items-center justify-end">
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -406,9 +385,9 @@ export function Inventory() {
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
-                        )}
-                      </div>
-                    </TableCell>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -416,83 +395,6 @@ export function Inventory() {
           </Table>
         </div>
       </div>
-
-      <Dialog open={!!viewingReservation} onOpenChange={() => setViewingReservation(null)}>
-        <DialogContent className="max-w-2xl rounded-xl">
-           <DialogHeader>
-              <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                 <Package className="w-5 h-5 text-orange-500" />
-                 Reservation Detail
-              </DialogTitle>
-           </DialogHeader>
-           {viewingReservation && (
-              <div className="space-y-6 pt-4">
-                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl text-xs">
-                    <div>
-                       <span className="text-slate-400 font-bold uppercase block mb-1">Product</span>
-                       <span className="font-bold text-slate-800">{viewingReservation.productName}</span>
-                       <span className="block font-mono text-slate-500 mt-0.5">{viewingReservation.sku}</span>
-                    </div>
-                    <div className="text-right">
-                       <span className="text-slate-400 font-bold uppercase block mb-1">Owner & Warehouse</span>
-                       <span className="font-bold text-slate-800">{viewingReservation.ownerName}</span>
-                       <span className="block text-slate-500 mt-0.5">{viewingReservation.warehouseName}</span>
-                    </div>
-                 </div>
-
-                 <div className="space-y-3">
-                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">Reserved By PO</h4>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                       <Table>
-                          <TableHeader className="bg-slate-50">
-                             <TableRow>
-                                <TableHead className="text-[10px] font-bold text-slate-400 uppercase">Vendor PO No</TableHead>
-                                <TableHead className="text-[10px] font-bold text-slate-400 uppercase">Status</TableHead>
-                                <TableHead className="text-right text-[10px] font-bold text-slate-400 uppercase pr-4">Qty Reserved</TableHead>
-                             </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                             {supplyPos
-                               .filter(spo => 
-                                  (spo.status === 'Verified' || spo.status === 'Sent') && 
-                                  spo.ownerId === viewingReservation.ownerId && 
-                                  spo.warehouseId === viewingReservation.warehouseId &&
-                                  spo.items?.some((it: any) => it.productId === viewingReservation.productId)
-                               )
-                               .map((spo, idx) => {
-                                  const item = spo.items.find((it: any) => it.productId === viewingReservation.productId);
-                                  return (
-                                     <TableRow key={idx} className="h-12 text-sm">
-                                        <TableCell className="font-bold text-[#0C4196] uppercase">{spo.supplyPoNumber}</TableCell>
-                                        <TableCell>
-                                           <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600">
-                                              {spo.status}
-                                           </span>
-                                        </TableCell>
-                                        <TableCell className="text-right font-bold text-orange-600 pr-4">{item?.qty || 0}</TableCell>
-                                     </TableRow>
-                                  );
-                               })
-                             }
-                             {supplyPos.filter(spo => (spo.status === 'Approved' || spo.status === 'Sent') && spo.ownerId === viewingReservation.ownerId && spo.warehouseId === viewingReservation.warehouseId && spo.items?.some((it: any) => it.productId === viewingReservation.productId)).length === 0 && (
-                                <TableRow>
-                                   <TableCell colSpan={3} className="text-center py-10 text-slate-400 text-xs italic">
-                                      No specific PO reservation records found.
-                                   </TableCell>
-                                </TableRow>
-                             )}
-                          </TableBody>
-                       </Table>
-                    </div>
-                 </div>
-
-                 <div className="pt-4 border-t flex justify-end">
-                    <Button onClick={() => setViewingReservation(null)} className="bg-slate-900 text-white font-bold px-8">Close</Button>
-                 </div>
-              </div>
-           )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
