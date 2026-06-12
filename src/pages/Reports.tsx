@@ -110,7 +110,7 @@ export function Reports() {
               data.push({
                 'No DO': d.doNumber,
                 'No Underlying PO': uPoObj?.poNumber || d.poNumber || '-',
-                'No Supply PO': sPoObj?.supplyPoNumber || '-',
+                'No Vendor PO': sPoObj?.supplyPoNumber || '-',
                 'Tanggal': format(d.createdAt, 'dd-MM-yyyy'),
                 'Jam': format(d.createdAt, 'HH:mm'),
                 'Nama Pelanggan': customer,

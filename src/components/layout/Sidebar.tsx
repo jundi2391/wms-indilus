@@ -28,7 +28,7 @@ const navItems: NavItem[] = [
     ]
   },
   { icon: Ticket, label: 'Underlying PO', to: '/underlying-pos' },
-  { icon: Layers, label: 'Supply PO', to: '/supply-pos' },
+  { icon: Layers, label: 'Vendor PO', to: '/supply-pos' },
   { icon: ArrowDownToLine, label: 'Barang Masuk', to: '/inbound' },
   { icon: ArrowUpFromLine, label: 'Barang Keluar', to: '/outbound' },
   { icon: Reply, label: 'Retur & Kerusakan', to: '/returns' },

@@ -194,7 +194,7 @@ export function Inbound() {
       supplyPoId = selectedSPOId;
       const selectedSupplyPo = supplyPos.find(spo => spo.id === supplyPoId);
       if (!selectedSupplyPo) {
-        toast.error('Supply PO tidak valid');
+        toast.error('Vendor PO tidak valid');
         return;
       }
       ownerId = selectedSupplyPo.ownerId;
@@ -464,16 +464,16 @@ export function Inbound() {
                     variant={inboundType === 'SPO' ? 'default' : 'ghost'} 
                     onClick={() => setInboundType('SPO')}
                     className={`h-8 px-4 text-xs font-bold rounded-md transition-all ${inboundType === 'SPO' ? 'bg-white text-[#0C4196] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                   >Supply PO Ref</Button>
+                   >Vendor PO Ref</Button>
                 </div>
 
                 <form id="inboundForm" onSubmit={submitInbound} className="space-y-6 flex-1 flex flex-col">
                   {inboundType === 'SPO' ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-1 duration-200">
                       <div className="space-y-1.5 flex-1">
-                        <Label className="text-xs font-bold text-slate-600 uppercase">Referensi Supply PO</Label>
+                        <Label className="text-xs font-bold text-slate-600 uppercase">Referensi Vendor PO</Label>
                         <select name="supplyPoId" required value={selectedSPOId} onChange={e => setSelectedSPOId(e.target.value)} className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
-                          <option value="">Pilih Supply PO...</option>
+                          <option value="">Pilih Vendor PO...</option>
                           {supplyPos?.filter(spo => spo.status === 'Verified' || spo.status === 'Sent').map((w: any) => (
                             <option key={w.id} value={w.id}>{w.supplyPoNumber} ({owners.find(o => o.id === w.ownerId)?.name})</option>
                           ))}
@@ -668,14 +668,14 @@ export function Inbound() {
 
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
         <DialogContent className="sm:max-w-5xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-6 bg-[#0C4196] text-white">
+          <DialogHeader className="p-4 sm:p-6 bg-[#0C4196] text-white">
             <DialogTitle className="text-xl font-bold flex items-center gap-3">
               <ArrowDownToLine className="w-6 h-6" /> Detail Barang Masuk
             </DialogTitle>
           </DialogHeader>
           {viewInbound && (
-            <div className="p-8 space-y-8 max-h-[80vh] overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-2 gap-8 text-sm">
+            <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 max-h-[80vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 text-sm">
                 <div className="space-y-4">
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No. Inbound</span>

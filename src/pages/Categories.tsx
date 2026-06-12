@@ -10,9 +10,11 @@ import { toast } from 'sonner';
 import { collection, query, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/authStore';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function Categories() {
   const [categories, setCategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [editCategory, setEditCategory] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -24,6 +26,10 @@ export function Categories() {
     const q = query(collection(db, 'categories'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error(error);
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -125,7 +131,26 @@ export function Categories() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {categories.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, idx) => (
+                <TableRow key={idx} className="h-16">
+                  <TableCell className="pl-6">
+                    <Skeleton className="h-4 w-32" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                  {isAdminOrManager && (
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end gap-2">
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))
+            ) : categories.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={isAdminOrManager ? 3 : 2} className="text-center py-20 text-slate-400">
                   <Layers className="w-12 h-12 mx-auto text-slate-200 mb-3" />

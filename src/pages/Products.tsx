@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import Barcode from 'react-barcode';
 import { toJpeg } from 'html-to-image';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function Products() {
   const [search, setSearch] = useState('');
@@ -137,7 +138,7 @@ export function Products() {
               <DialogTitle className="text-xl font-bold">{editProduct ? 'Ubah Produk' : 'Tambah Produk Baru'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={onSubmit} className="space-y-6 mt-4">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">Nama Produk</Label>
@@ -152,7 +153,7 @@ export function Products() {
                       ))}
                     </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-bold text-slate-600 uppercase">SKU</Label>
                       <Input name="sku" required placeholder="SKU-001" className="h-10 rounded-lg" defaultValue={editProduct?.sku} />
@@ -162,7 +163,7 @@ export function Products() {
                       <Input name="barcode" required placeholder="899123456" className="h-10 rounded-lg" defaultValue={editProduct?.barcode} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-bold text-slate-600 uppercase">Satuan</Label>
                       <Input name="unit" required placeholder="PCS" className="h-10 rounded-lg" defaultValue={editProduct?.unit || 'PCS'} />
@@ -230,37 +231,64 @@ export function Products() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading && <TableRow><TableCell colSpan={6} className="text-center py-20 text-slate-400">Memuat data...</TableCell></TableRow>}
-              {!isLoading && filtered.length === 0 && (
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, idx) => (
+                  <TableRow key={idx} className="h-16">
+                    <TableCell className="pl-6">
+                      <Skeleton className="h-4 w-40" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-16" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-28" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Skeleton className="h-4 w-20 ml-auto" />
+                    </TableCell>
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end gap-2">
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-20 text-slate-400">
                     <Tag className="w-12 h-12 mx-auto text-slate-200 mb-3" />
                     <p className="text-sm font-bold text-slate-600">Produk tidak ditemukan</p>
                   </TableCell>
                 </TableRow>
+              ) : (
+                filtered.map((item: any) => (
+                  <TableRow key={item.id} className="h-16 group hover:bg-slate-50/50">
+                    <TableCell className="font-bold text-slate-900 pl-6 text-sm">{item.name}</TableCell>
+                    <TableCell className="text-xs font-medium text-[#0C4196] font-mono">{item.sku}</TableCell>
+                    <TableCell className="text-sm text-slate-600">{categories?.find((c: any) => c.id === item.categoryId)?.name || '-'}</TableCell>
+                    <TableCell className="text-xs font-mono text-slate-500">{item.barcode}</TableCell>
+                    <TableCell className="text-right text-sm font-bold text-slate-900">Rp {item.price?.toLocaleString('id-ID') || 0}</TableCell>
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => setStickerProduct(item)} className="h-8 w-8 text-slate-400 hover:text-[#0C4196] hover:bg-white" title="Cetak Barcode">
+                          <Printer className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(item)} className="h-8 w-8 text-slate-400 hover:text-[#0C4196] hover:bg-white">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id, item.name)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
-              {filtered.map((item: any) => (
-                <TableRow key={item.id} className="h-16 group hover:bg-slate-50/50">
-                  <TableCell className="font-bold text-slate-900 pl-6 text-sm">{item.name}</TableCell>
-                  <TableCell className="text-xs font-medium text-[#0C4196] font-mono">{item.sku}</TableCell>
-                  <TableCell className="text-sm text-slate-600">{categories?.find((c: any) => c.id === item.categoryId)?.name || '-'}</TableCell>
-                  <TableCell className="text-xs font-mono text-slate-500">{item.barcode}</TableCell>
-                  <TableCell className="text-right text-sm font-bold text-slate-900">Rp {item.price?.toLocaleString('id-ID') || 0}</TableCell>
-                  <TableCell className="text-right pr-6">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => setStickerProduct(item)} className="h-8 w-8 text-slate-400 hover:text-[#0C4196] hover:bg-white" title="Cetak Barcode">
-                        <Printer className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(item)} className="h-8 w-8 text-slate-400 hover:text-[#0C4196] hover:bg-white">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id, item.name)} className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
             </TableBody>
           </Table>
         </div>

@@ -7,6 +7,7 @@ import { collection, onSnapshot, query, limit, orderBy, where, getDocs } from 'f
 import { db } from '@/lib/firebase';
 import { format, subDays, startOfDay } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function Dashboard() {
   const { appUser } = useAuthStore();
@@ -182,7 +183,11 @@ export function Dashboard() {
                </div>
              </div>
              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">{kpi.label}</p>
-             <h3 className="text-base md:text-xl font-bold text-slate-900 truncate">{kpi.value}</h3>
+             {loading ? (
+               <Skeleton className="h-6 w-24 my-0.5" />
+             ) : (
+               <h3 className="text-base md:text-xl font-bold text-slate-900 truncate">{kpi.value}</h3>
+             )}
              <p className="text-[10px] text-slate-400 mt-0.5">{kpi.sub}</p>
           </div>
         ))}
@@ -199,7 +204,26 @@ export function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
-            {warehouses.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 4 }).map((_, idx) => (
+                <div key={idx} className="p-5 border border-slate-100 rounded-2xl bg-slate-50/50 flex flex-col justify-between h-[132px]">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-1.5 flex-1 pr-4">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                    <Skeleton className="h-5 w-16" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-1.5 w-full rounded" />
+                    <div className="flex justify-between">
+                      <Skeleton className="h-3 w-10" />
+                      <Skeleton className="h-3 w-10" />
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : warehouses.length === 0 ? (
               <div className="col-span-2 flex items-center justify-center h-40 text-slate-400 italic text-sm">
                 Belum ada data gudang
               </div>
@@ -245,8 +269,21 @@ export function Dashboard() {
 
           <div className="space-y-6 flex-1 overflow-y-auto pr-2 custom-scrollbar focus:outline-none">
             {loading ? (
-              <div className="flex items-center justify-center h-full">
-                 <Loader2 className="w-8 h-8 animate-spin text-[#0C4196]" />
+              <div className="space-y-5">
+                {Array.from({ length: 4 }).map((_, idx) => (
+                  <div key={idx} className="flex gap-4 items-start">
+                    <Skeleton className="w-10 h-10 rounded-xl" />
+                    <div className="flex-1 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <Skeleton className="h-4 w-28" />
+                        <Skeleton className="h-3 w-8" />
+                      </div>
+                      <Skeleton className="h-3.5 w-32" />
+                      <Skeleton className="h-3 w-40" />
+                      <Skeleton className="h-4.5 w-16" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : enhancedTransactions.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-400">

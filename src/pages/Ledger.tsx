@@ -99,7 +99,7 @@ export function Ledger() {
                         if (inb) {
                             subText1 = `Inbound: ${inb.inboundNumber}`;
                             const spo = supplyPos.find(s => s.id === inb.supplyPoId);
-                            if (spo) subText2 = `Supply PO: ${spo.supplyPoNumber}`;
+                            if (spo) subText2 = `Vendor PO: ${spo.supplyPoNumber}`;
                         }
                     } else if (l.referenceType === 'DELIVERY_ORDER') {
                         const out = deliveries.find(d => d.id === l.referenceId);

@@ -9,9 +9,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/store/authStore';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function ProjectExecutors() {
   const [executors, setExecutors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [editExecutor, setEditExecutor] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -24,6 +26,10 @@ export function ProjectExecutors() {
     const q = query(collection(db, 'project_executors'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setExecutors(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error(error);
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -111,7 +117,7 @@ export function ProjectExecutors() {
                 <DialogTitle className="text-xl font-bold">{editExecutor ? 'Ubah Project Executor' : 'Tambah Project Executor'}</DialogTitle>
               </DialogHeader>
               <form onSubmit={onSubmit} className="space-y-4 mt-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">Kode Executor</Label>
                     <Input name="code" required placeholder="Contoh: EXE-001" className="h-10 rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" defaultValue={editExecutor?.code} />
@@ -162,7 +168,32 @@ export function ProjectExecutors() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredExecutors.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, idx) => (
+                <TableRow key={idx} className="h-16">
+                  <TableCell className="pl-6">
+                    <Skeleton className="h-4 w-16" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-40" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-32" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-5 w-14 rounded" />
+                  </TableCell>
+                  {isAdminOrManager && (
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end gap-2">
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))
+            ) : filteredExecutors.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={isAdminOrManager ? 5 : 4} className="text-center py-20 text-slate-400">
                   <Users className="w-12 h-12 mx-auto text-slate-200 mb-3" />

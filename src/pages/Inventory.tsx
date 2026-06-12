@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useAuthStore } from '@/store/authStore';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function Inventory() {
   const { appUser } = useAuthStore();
@@ -21,6 +22,7 @@ export function Inventory() {
   const [products, setProducts] = useState<any[]>([]);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [owners, setOwners] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState(searchParams.get('warehouseId') || '');
   const [ownerFilter, setOwnerFilter] = useState('');
@@ -30,27 +32,43 @@ export function Inventory() {
   const [viewingReservation, setViewingReservation] = useState<any>(null);
 
   useEffect(() => {
+    let count = 0;
+    const checkLoading = () => {
+      count++;
+      if (count >= 5) setLoading(false);
+    };
+
     const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
       setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+      checkLoading();
+    }, (err) => { console.error(err); checkLoading(); });
+
     const unsubWarehouses = onSnapshot(collection(db, 'warehouses'), (snap) => {
       setWarehouses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+      checkLoading();
+    }, (err) => { console.error(err); checkLoading(); });
+
     const unsubOwners = onSnapshot(collection(db, 'owners'), (snap) => {
       setOwners(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+      checkLoading();
+    }, (err) => { console.error(err); checkLoading(); });
+
     const unsubSPOs = onSnapshot(collection(db, 'supply_pos'), (snap) => {
       setSupplyPos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
+      checkLoading();
+    }, (err) => { console.error(err); checkLoading(); });
 
     const q = query(collection(db, 'inventory'));
     const unsubInventory = onSnapshot(q, (snapshot) => {
       setInventory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+      checkLoading();
+    }, (err) => { console.error(err); checkLoading(); });
+
     return () => {
       unsubProducts();
       unsubWarehouses();
       unsubOwners();
+      unsubSPOs();
       unsubInventory();
     }
   }, []);
@@ -186,12 +204,12 @@ export function Inventory() {
               Penyesuaian Stok
             </Button>
           } />
-          <DialogContent className="rounded-xl p-8">
+          <DialogContent className="rounded-xl p-5 sm:p-8">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold">Penyesuaian Stok Manual</DialogTitle>
             </DialogHeader>
             <form onSubmit={onSubmit} className="space-y-4 mt-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">Owner</Label>
                     <select name="ownerId" required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196] outline-none">
@@ -300,7 +318,39 @@ export function Inventory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredInventory.length === 0 ? (
+              {loading ? (
+                Array.from({ length: 5 }).map((_, idx) => (
+                  <TableRow key={idx} className="h-16">
+                    <TableCell className="pl-6">
+                      <Skeleton className="h-4 w-40" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-16" />
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <Skeleton className="h-3 w-28" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Skeleton className="h-4 w-10 ml-auto" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Skeleton className="h-4 w-10 ml-auto" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Skeleton className="h-4 w-10 ml-auto" />
+                    </TableCell>
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end gap-3 items-center">
+                        <Skeleton className="h-4 w-12" />
+                        {isSuperAdmin && <Skeleton className="h-8 w-8 rounded-lg" />}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : filteredInventory.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={isSuperAdmin ? 8 : 7} className="text-center py-20 text-slate-400">
                     <Package className="w-12 h-12 mx-auto text-slate-200 mb-3" />
@@ -377,7 +427,7 @@ export function Inventory() {
            </DialogHeader>
            {viewingReservation && (
               <div className="space-y-6 pt-4">
-                 <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl text-xs">
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl text-xs">
                     <div>
                        <span className="text-slate-400 font-bold uppercase block mb-1">Product</span>
                        <span className="font-bold text-slate-800">{viewingReservation.productName}</span>
@@ -396,7 +446,7 @@ export function Inventory() {
                        <Table>
                           <TableHeader className="bg-slate-50">
                              <TableRow>
-                                <TableHead className="text-[10px] font-bold text-slate-400 uppercase">Supply PO No</TableHead>
+                                <TableHead className="text-[10px] font-bold text-slate-400 uppercase">Vendor PO No</TableHead>
                                 <TableHead className="text-[10px] font-bold text-slate-400 uppercase">Status</TableHead>
                                 <TableHead className="text-right text-[10px] font-bold text-slate-400 uppercase pr-4">Qty Reserved</TableHead>
                              </TableRow>

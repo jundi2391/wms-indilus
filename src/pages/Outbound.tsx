@@ -33,6 +33,7 @@ export function Outbound() {
   const [underlyingPos, setUnderlyingPos] = useState<any[]>([]);
   const [supplyPos, setSupplyPos] = useState<any[]>([]);
   const [ledgers, setLedgers] = useState<any[]>([]);
+  const [returnRequests, setReturnRequests] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
@@ -43,6 +44,10 @@ export function Outbound() {
   const [isDamageDialogOpen, setIsDamageDialogOpen] = useState(false);
   const [damageTarget, setDamageTarget] = useState<any>(null);
   const [damageForm, setDamageForm] = useState({ productId: '', qty: 0 });
+
+  // Replacement DO logic states
+  const [doType, setDoType] = useState<'normal' | 'replacement'>('normal');
+  const [selectedUPOIdReplacement, setSelectedUPOIdReplacement] = useState<string>('');
 
   useEffect(() => {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snap) => {
@@ -75,6 +80,9 @@ export function Outbound() {
     const unsubLedgers = onSnapshot(collection(db, 'inventory_ledgers'), (snap) => {
       setLedgers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
+    const unsubReturnRequests = onSnapshot(collection(db, 'return_requests'), (snap) => {
+      setReturnRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
     return () => {
       unsubProducts();
       unsubWarehouses();
@@ -86,6 +94,7 @@ export function Outbound() {
       unsubUnderlyingPos();
       unsubSupplyPos();
       unsubLedgers();
+      unsubReturnRequests();
     };
   }, []);
 
@@ -156,15 +165,70 @@ export function Outbound() {
       };
     });
     return statusMap;
-  }, [selectedSPO, uniqueAddresses, deliveries]);
+  }, [selectedSPO, uniqueAddresses, deliveries, ledgers]);
+
+  // Filter shipping area for Replacement DO based on return/damage history
+  const selectableShippingAreas = useMemo(() => {
+    if (doType !== 'replacement' || !selectedUPOIdReplacement) return [];
+    
+    const matchingReqs = returnRequests.filter(r => 
+      (r.underlying_po_id === selectedUPOIdReplacement || r.underlyingPoId === selectedUPOIdReplacement) &&
+      r.status === 'Pending'
+    );
+    const uniqueAreas = new Set<string>();
+    matchingReqs.forEach(r => {
+      if (r.shippingAddress) uniqueAreas.add(r.shippingAddress);
+      if (r.shipping_area_id) uniqueAreas.add(r.shipping_area_id);
+    });
+    return Array.from(uniqueAreas);
+  }, [doType, selectedUPOIdReplacement, returnRequests]);
 
   useEffect(() => {
-    if (uniqueAddresses.length === 1) {
-      setSelectedAddress(uniqueAddresses[0]);
+    if (doType === 'normal') {
+      if (uniqueAddresses.length === 1) {
+        setSelectedAddress(uniqueAddresses[0]);
+      } else {
+        setSelectedAddress('');
+      }
     } else {
-      setSelectedAddress('');
+      if (selectableShippingAreas.length === 1) {
+        setSelectedAddress(selectableShippingAreas[0]);
+      } else if (!selectableShippingAreas.includes(selectedAddress)) {
+        setSelectedAddress('');
+      }
     }
-  }, [uniqueAddresses]);
+  }, [uniqueAddresses, doType, selectableShippingAreas, selectedAddress]);
+
+  // Group and autofill items from all pending return requests for selected UPO
+  const autoItems = useMemo(() => {
+    if (doType !== 'replacement' || !selectedUPOIdReplacement) return [];
+    
+    const matchedReqs = returnRequests.filter(r => 
+      (r.underlyingPoId === selectedUPOIdReplacement || r.underlying_po_id === selectedUPOIdReplacement) && 
+      r.status === 'Pending'
+    );
+    
+    const grouped: Record<string, number> = {};
+    matchedReqs.forEach(r => {
+      grouped[r.productId] = (grouped[r.productId] || 0) + (Number(r.qty) || 0);
+    });
+
+    return Object.keys(grouped).map(pId => {
+      const prod = products.find(p => p.id === pId);
+      return {
+        product: prod,
+        qty: grouped[pId]
+      };
+    }).filter(item => item.product);
+  }, [doType, selectedUPOIdReplacement, returnRequests, products]);
+
+  useEffect(() => {
+    if (doType === 'replacement' && autoItems.length > 0) {
+      setItems(autoItems);
+    } else if (doType === 'replacement' && autoItems.length === 0) {
+      setItems([]);
+    }
+  }, [doType, autoItems]);
 
   const spoData = useMemo(() => {
     if (!selectedSPO || !selectedUPO) return null;
@@ -208,8 +272,159 @@ export function Outbound() {
 
   const submitOutbound = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (doType === 'replacement') {
+      if (!selectedUPOIdReplacement) {
+        toast.error('Pilih Referensi Underlying PO terlebih dahulu');
+        return;
+      }
+      if (!selectedWHId) {
+        toast.error('Pilih Gudang Asal terlebih dahulu');
+        return;
+      }
+      if (!selectedAddress) {
+        toast.error('Pilih Alamat Pengiriman terlebih dahulu');
+        return;
+      }
+      if (items.length === 0) {
+        toast.error('Tidak ada item yang dapat dikirim (Harus ada laporan retur status Pending)');
+        return;
+      }
+
+      const upo = underlyingPos.find(u => u.id === selectedUPOIdReplacement);
+      if (!upo) {
+        toast.error('Data Underlying PO tidak valid');
+        return;
+      }
+
+      const form = e.currentTarget;
+      const fd = new FormData(form);
+      const warehouseId = selectedWHId;
+      const doNumber = fd.get('doNumber') as string || 'DO-' + Date.now();
+      const ownerId = upo.ownerId;
+
+      try {
+        const now = Date.now();
+        const deliveryRef = doc(collection(db, 'delivery_orders'));
+
+        await runTransaction(db, async (transaction) => {
+          const invRefs = items.map(item => doc(db, 'inventory', `${ownerId}_${warehouseId}_${item.product.id}`));
+          const invDocs = await Promise.all(invRefs.map(ref => transaction.get(ref)));
+
+          // Validate enough stock (Available check ONLY)
+          invDocs.forEach((invDoc, index) => {
+            const item = items[index];
+            const whName = warehouses.find(w => w.id === warehouseId)?.name || warehouseId;
+            const ownerName = owners.find(o => o.id === ownerId)?.name || ownerId;
+
+            if (!invDoc.exists()) {
+               throw new Error(`Record inventory tidak ditemukan untuk [${ownerName}] di [${whName}] untuk produk [${item.product.name}]. Pastikan stok sudah tersedia di gudang ini.`);
+            }
+            
+            const availableQty = Number(invDoc.data().availableQty) || 0;
+
+            if (availableQty < item.qty) {
+               throw new Error(`Stok available tidak cukup di ${whName} untuk ${item.product.name}. Tersedia: ${availableQty}, Diminta: ${item.qty}.`);
+            }
+          });
+
+          // Write phases
+          transaction.set(deliveryRef, {
+            underlyingPoId: selectedUPOIdReplacement,
+            underlying_po_id: selectedUPOIdReplacement,
+            ownerId,
+            executorId: upo.executorId || '',
+            customerId: upo.customerId || '',
+            warehouseId,
+            warehouse_id: warehouseId,
+            expeditionId: fd.get('expeditionId'),
+            doNumber,
+            shippingAddress: selectedAddress,
+            shipping_area_id: selectedAddress,
+            notes: fd.get('notes'),
+            status: 'Completed',
+            createdBy: appUser?.uid,
+            createdAt: now,
+            type: 'replacement',
+            items
+          });
+
+          // Update inventory
+          items.forEach((item, index) => {
+            const invRef = invRefs[index];
+            const invDoc = invDocs[index];
+            
+            const currentOH = Number(invDoc.data().onHandQty) || 0;
+            const currentAvailable = Number(invDoc.data().availableQty) || 0;
+
+            const newOH = currentOH - item.qty;
+            const newAvailable = currentAvailable - item.qty;
+
+            transaction.update(invRef, {
+              onHandQty: newOH,
+              availableQty: newAvailable,
+              updatedAt: now
+            });
+
+            const ledgerRef = doc(collection(db, 'inventory_ledgers'));
+            transaction.set(ledgerRef, {
+              transactionNumber: 'TRX-REP-' + now + '-' + index,
+              transactionType: 'OUTBOUND_SEND',
+              type: 'replacement',
+              productId: item.product.id,
+              ownerId,
+              warehouseId,
+              qtyBefore: currentOH,
+              qtyChange: -item.qty,
+              qtyAfter: newOH,
+              referenceType: 'DELIVERY_ORDER',
+              referenceId: deliveryRef.id,
+              createdBy: appUser?.uid,
+              createdAt: now
+            });
+          });
+
+          // Update all matching return requests of this UPO that are Pending to 'Replaced'
+          const matchingReturnRequests = returnRequests.filter(r =>
+            (r.underlyingPoId === selectedUPOIdReplacement || r.underlying_po_id === selectedUPOIdReplacement) &&
+            r.status === 'Pending'
+          );
+
+          matchingReturnRequests.forEach(retReq => {
+            const returnReqRef = doc(db, 'return_requests', retReq.id);
+            transaction.update(returnReqRef, {
+              status: 'Replaced',
+              replacementDoId: deliveryRef.id,
+              replacedAt: now,
+              replacedBy: appUser?.uid
+            });
+          });
+
+          // Write Audit Logs
+          const auditRef = doc(collection(db, 'audit_logs'));
+          transaction.set(auditRef, {
+              user: appUser?.name || 'Unknown',
+              action: 'Outbound Replacement DO Created (Stock Reduced)',
+              module: 'Outbound',
+              recordId: deliveryRef.id,
+              timestamp: now
+          });
+        });
+
+        toast.success('Pengiriman Replacement berhasil diproses. Stok dikurangi secara langsung.');
+        setItems([]);
+        setSelectedUPOIdReplacement('');
+        setSelectedAddress('');
+        form.reset();
+      } catch (err: any) {
+        toast.error(err.message || 'Gagal memproses pengiriman');
+      }
+      return;
+    }
+
+    // Normal DO Flow (Existing Logic)
     if (!selectedSPO) {
-      toast.error('Pilih Supply PO terlebih dahulu');
+      toast.error('Pilih Vendor PO terlebih dahulu');
       return;
     }
     if (items.length === 0) {
@@ -240,7 +455,7 @@ export function Outbound() {
           const ownerName = owners.find(o => o.id === ownerId)?.name || ownerId;
 
           if (!invDoc.exists()) {
-             throw new Error(`Record inventory tidak ditemukan untuk [${ownerName}] di [${whName}] untuk produk [${item.product.name}]. Pastikan stok sudah di-Inbound atau di-Allocation ke gudang ini.`);
+              throw new Error(`Record inventory tidak ditemukan untuk [${ownerName}] di [${whName}] untuk produk [${item.product.name}]. Pastikan stok sudah di-Inbound atau di-Allocation ke gudang ini.`);
           }
           
           const reservedQty = Number(invDoc.data().reservedQty) || 0;
@@ -310,9 +525,6 @@ export function Outbound() {
           });
         });
 
-        // Update Supply PO status if needed (or just log)
-        // Check if SPO is fully fulfilled?
-        
         // Write Audit Logs
         const auditRef = doc(collection(db, 'audit_logs'));
         transaction.set(auditRef, {
@@ -327,6 +539,7 @@ export function Outbound() {
       toast.success('Pengiriman diproses. Stok On Hand & Reserved dikurangi.');
       setItems([]);
       setSelectedSPOId('');
+      setSelectedAddress('');
       form.reset();
     } catch(err: any) {
       toast.error(err.message || 'Gagal memproses barang keluar');
@@ -335,7 +548,15 @@ export function Outbound() {
 
   const filteredDeliveries = useMemo(() => {
     return deliveries.filter(deli => {
-      const deliveryMonth = format(new Date(deli.createdAt), 'yyyy-MM');
+      let deliveryMonth = '';
+      if (deli.createdAt) {
+        try {
+          const d = new Date(deli.createdAt);
+          if (!isNaN(d.getTime())) {
+            deliveryMonth = format(d, 'yyyy-MM');
+          }
+        } catch (e) {}
+      }
       const matchesMonth = deliveryMonth === selectedMonth;
       
       const poNum = underlyingPos.find(u => u.id === deli.underlyingPoId)?.poNumber || '';
@@ -345,13 +566,24 @@ export function Outbound() {
         poNum.toLowerCase().includes(searchQuery.toLowerCase());
       
       return matchesMonth && matchesSearch;
-    }).sort((a,b) => b.createdAt - a.createdAt);
+    }).sort((a, b) => {
+      const valA = a.createdAt || 0;
+      const valB = b.createdAt || 0;
+      return valB - valA;
+    });
   }, [deliveries, selectedMonth, searchQuery, underlyingPos]);
 
   const availableMonths = useMemo(() => {
     const months = new Set<string>();
     deliveries.forEach(d => {
-      months.add(format(new Date(d.createdAt), 'yyyy-MM'));
+      if (d.createdAt) {
+        try {
+          const dt = new Date(d.createdAt);
+          if (!isNaN(dt.getTime())) {
+            months.add(format(dt, 'yyyy-MM'));
+          }
+        } catch (e) {}
+      }
     });
     months.add(format(new Date(), 'yyyy-MM'));
     return Array.from(months).sort().reverse();
@@ -378,82 +610,143 @@ export function Outbound() {
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-50 pb-4 mb-6 uppercase tracking-wider">
                   <ScanBarcode className="w-4 h-4 text-[#0C4196]" /> PDA Picking
                 </h3>
-                <form onSubmit={handleScan} className="space-y-3 mb-8">
-                  <Label className="text-xs font-bold text-slate-600 uppercase">Scan Barcode Produk</Label>
-                  <Input
-                    ref={scannerRef}
-                    autoFocus
-                    placeholder="Scan atau ketik barcode..."
-                    value={scannedBarcode}
-                    onChange={e => setScannedBarcode(e.target.value)}
-                    className="h-12 text-lg font-mono rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]"
-                  />
-                  <p className="text-[10px] text-slate-400 font-medium">Input menangkap event keyboard PDA scanner secara otomatis.</p>
-                </form>
+                {doType === 'replacement' ? (
+                  <div className="bg-amber-50/70 border border-amber-200/60 text-amber-900 p-5 rounded-xl text-xs space-y-3/2 flex-1 flex flex-col justify-center text-center animate-in fade-in duration-300">
+                    <div className="mx-auto w-10 h-10 bg-amber-100/80 rounded-full flex items-center justify-center text-amber-600 mb-3">
+                      <ScanBarcode className="w-5 h-5" />
+                    </div>
+                    <p className="font-bold text-sm text-amber-800">Mode Replacement DO Aktif</p>
+                    <p className="text-slate-600 leading-relaxed text-[11px] max-w-xs mx-auto">
+                      Item pengiriman secara otomatis diambil dari tiket retur/damage yang dipilih. Tidak diperbolehkan melakukan penambahan produk manual demi keakuratan pencatatan.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <form onSubmit={handleScan} className="space-y-3 mb-8">
+                      <Label className="text-xs font-bold text-slate-600 uppercase">Scan Barcode Produk</Label>
+                      <Input
+                        ref={scannerRef}
+                        autoFocus
+                        placeholder="Scan atau ketik barcode..."
+                        value={scannedBarcode}
+                        onChange={e => setScannedBarcode(e.target.value)}
+                        className="h-12 text-lg font-mono rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]"
+                      />
+                      <p className="text-[10px] text-slate-400 font-medium">Input menangkap event keyboard PDA scanner secara otomatis.</p>
+                    </form>
 
-                <div className="border-t border-slate-50 mt-auto pt-6">
-                  <h4 className="text-xs font-bold text-slate-900 mb-4 uppercase tracking-wider">Atau Pilih Manual</h4>
-                  <form onSubmit={(e) => {
-                    e.preventDefault();
-                    const form = e.currentTarget;
-                    const fd = new FormData(form);
-                    const productId = fd.get('productId') as string;
-                    const qty = parseInt(fd.get('qty') as string) || 1;
-                    
-                    if (!productId || qty < 1) return;
-                    const matchedProduct = products?.find((p: any) => p.id === productId);
-                    if (matchedProduct) {
-                      setItems(prev => {
-                        const existing = prev.find(i => i.product.id === matchedProduct.id);
-                        if (existing) {
-                          return prev.map(i => i.product.id === matchedProduct.id ? { ...i, qty: i.qty + qty } : i);
+                    <div className="border-t border-slate-50 mt-auto pt-6">
+                      <h4 className="text-xs font-bold text-slate-900 mb-4 uppercase tracking-wider">Atau Pilih Manual</h4>
+                      <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget;
+                        const fd = new FormData(form);
+                        const productId = fd.get('productId') as string;
+                        const qty = parseInt(fd.get('qty') as string) || 1;
+                        
+                        if (!productId || qty < 1) return;
+                        const matchedProduct = products?.find((p: any) => p.id === productId);
+                        if (matchedProduct) {
+                          setItems(prev => {
+                            const existing = prev.find(i => i.product.id === matchedProduct.id);
+                            if (existing) {
+                              return prev.map(i => i.product.id === matchedProduct.id ? { ...i, qty: i.qty + qty } : i);
+                            }
+                            return [...prev, { product: matchedProduct, qty }];
+                          });
+                          toast.success(`Berhasil ditambah: ${qty}x ${matchedProduct.name}`);
+                          form.reset();
                         }
-                        return [...prev, { product: matchedProduct, qty }];
-                      });
-                      toast.success(`Berhasil ditambah: ${qty}x ${matchedProduct.name}`);
-                      form.reset();
-                    }
-                  }} className="space-y-4">
-                    <div className="space-y-1.5">
-                       <Label className="text-[10px] font-bold text-slate-500 uppercase">Pilih Produk</Label>
-                       <select name="productId" required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
-                         <option value="">Pilih produk...</option>
-                         {products?.map((p: any) => (
-                           <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
-                         ))}
-                       </select>
+                      }} className="space-y-4">
+                        <div className="space-y-1.5">
+                           <Label className="text-[10px] font-bold text-slate-500 uppercase">Pilih Produk</Label>
+                           <select name="productId" required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
+                             <option value="">Pilih produk...</option>
+                             {products?.map((p: any) => (
+                               <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                             ))}
+                           </select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-bold text-slate-500 uppercase">Jumlah</Label>
+                          <Input type="number" name="qty" min="1" defaultValue="1" required className="h-10 rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" />
+                        </div>
+                        <Button type="submit" variant="outline" className="w-full h-10 rounded-lg font-bold border-slate-200 text-slate-700 hover:bg-slate-50">Tambah Item</Button>
+                      </form>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px] font-bold text-slate-500 uppercase">Jumlah</Label>
-                      <Input type="number" name="qty" min="1" defaultValue="1" required className="h-10 rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" />
-                    </div>
-                    <Button type="submit" variant="outline" className="w-full h-10 rounded-lg font-bold border-slate-200 text-slate-700 hover:bg-slate-50">Tambah Item</Button>
-                  </form>
-                </div>
+                  </>
+                )}
               </div>
             </div>
 
             <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
               <div className="p-6 h-full flex flex-col">
-                <h3 className="text-sm font-bold text-slate-900 mb-6 uppercase tracking-wider">Detail Pengiriman</h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-6">
+                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Detail Pengiriman</h3>
+                  <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => { setDoType('normal'); setSelectedUPOIdReplacement(''); setSelectedSPOId(''); setItems([]); }}
+                      className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${doType === 'normal' ? 'bg-[#0C4196] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      Normal DO
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDoType('replacement'); setSelectedSPOId(''); setSelectedUPOIdReplacement(''); setItems([]); }}
+                      className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${doType === 'replacement' ? 'bg-[#0C4196] text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      Replacement DO
+                    </button>
+                  </div>
+                </div>
+                
                 <form onSubmit={submitOutbound} className="space-y-6 flex-1 flex flex-col">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-slate-600 uppercase">1. Referensi Supply PO (Allocation)</Label>
-                      <select name="selectedSPOId" value={selectedSPOId} onChange={e => setSelectedSPOId(e.target.value)} required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
-                        <option value="">Pilih Supply PO...</option>
-                        {supplyPos?.filter(s => s.status === 'Verified' || s.status === 'Sent').map((s: any) => (
-                          <option key={s.id} value={s.id}>{s.supplyPoNumber}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {doType === 'normal' ? (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-bold text-slate-600 uppercase">1. Referensi Vendor PO (Allocation)</Label>
+                        <select name="selectedSPOId" value={selectedSPOId} onChange={e => setSelectedSPOId(e.target.value)} required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
+                          <option value="">Pilih Vendor PO...</option>
+                          {supplyPos?.filter(s => s.status === 'Verified' || s.status === 'Sent').map((s: any) => (
+                            <option key={s.id} value={s.id}>{s.supplyPoNumber}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-bold text-[#0C4196] uppercase">1. Referensi Underlying PO (Retur/Damage)</Label>
+                        <select 
+                          name="selectedUPOIdReplacement" 
+                          value={selectedUPOIdReplacement} 
+                          onChange={e => {
+                            setSelectedUPOIdReplacement(e.target.value);
+                            const matchedRes = returnRequests.find(r => (r.underlyingPoId === e.target.value || r.underlying_po_id === e.target.value));
+                            if (matchedRes && matchedRes.warehouseId) {
+                              setSelectedWHId(matchedRes.warehouseId);
+                            }
+                          }} 
+                          required 
+                          className="flex h-10 w-full rounded-lg border border-[#0C4196] bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none font-bold"
+                        >
+                          <option value="">Pilih Underlying PO...</option>
+                          {underlyingPos.filter(upo => {
+                            return returnRequests.some(r => r.status === 'Pending' && (r.underlyingPoId === upo.id || r.underlying_po_id === upo.id));
+                          }).map((upo: any) => (
+                            <option key={upo.id} value={upo.id}>
+                              {upo.poNumber} ({owners.find(o => o.id === upo.ownerId)?.name || 'Owner'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="space-y-1.5">
                        <Label className="text-xs font-bold text-slate-600 uppercase">2. Nomor DO</Label>
                        <Input name="doNumber" placeholder="DO-2023-XXXX" className="h-10 rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" />
                     </div>
                   </div>
-
-                  {spoData && (
+ 
+                  {doType === 'normal' && spoData && (
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl relative animate-in fade-in duration-300">
                       <div className="absolute top-2 right-2 flex items-center gap-1">
                         <div className="h-2 w-20 sm:w-32 bg-slate-200 rounded-full overflow-hidden">
@@ -480,6 +773,40 @@ export function Outbound() {
                     </div>
                   )}
 
+                  {doType === 'replacement' && selectedUPOIdReplacement && (() => {
+                    const upo = underlyingPos.find(u => u.id === selectedUPOIdReplacement);
+                    const matchingReqs = returnRequests.filter(r => 
+                      (r.underlying_po_id === selectedUPOIdReplacement || r.underlyingPoId === selectedUPOIdReplacement) &&
+                      r.status === 'Pending'
+                    );
+                    if (matchingReqs.length === 0) return null;
+                    return (
+                      <div className="p-4 bg-[#0C4196]/5 border border-[#0C4196]/20 rounded-xl space-y-3 animate-in fade-in duration-300">
+                        <div className="flex justify-between items-center border-b border-[#0C4196]/10 pb-2">
+                          <span className="text-xs font-bold text-[#0C4196] uppercase tracking-wide font-sans">Daftar Barang Retur / Damage ({upo?.poNumber})</span>
+                          <span className="px-2.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-black rounded-full uppercase">Status: Pending Replacement</span>
+                        </div>
+                        <div className="space-y-2 font-sans text-xs">
+                          {matchingReqs.map((ret, index) => {
+                            const prodName = products.find(p => p.id === ret.productId)?.name || 'Produk';
+                            return (
+                              <div key={ret.id} className="flex justify-between items-start py-1 border-b border-dashed border-[#0C4196]/10 last:border-b-0">
+                                <div>
+                                  <span className="font-bold text-slate-800">{prodName}</span>
+                                  {ret.notes && <p className="text-[10px] text-slate-500 italic">Catatan: {ret.notes}</p>}
+                                </div>
+                                <div className="text-right">
+                                  <span className="font-bold text-red-600 block">{ret.qty} Unit</span>
+                                  <span className="text-[9px] text-slate-400 font-mono uppercase">{ret.category || 'Retur'}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+ 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-xs font-bold text-slate-600 uppercase">Ekspedisi / Kurir</Label>
@@ -506,34 +833,51 @@ export function Outbound() {
                         </select>
                     </div>
                   </div>
-
-                  <div className="space-y-1.5">
+ 
+                  <div className="space-y-1.5 font-sans">
                     <Label className="text-xs font-bold text-slate-600 uppercase text-[#0C4196]">Pilih Alamat Pengiriman (Shipping Address)</Label>
-                    <select 
-                      name="shippingAddress" 
-                      required 
-                      value={selectedAddress} 
-                      onChange={e => setSelectedAddress(e.target.value)}
-                      className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none"
-                    >
-                      <option value="">Pilih Alamat...</option>
-                      {uniqueAddresses.map(addr => {
-                        const stats = addressStatus[addr];
-                        const isFulfilled = stats?.isFulfilled;
-                        return (
-                          <option key={addr} value={addr} disabled={isFulfilled} className={isFulfilled ? 'text-slate-300' : ''}>
-                            {addr} {isFulfilled ? '(FULFILLED)' : `(${stats?.totalShipped}/${stats?.totalOrdered})`}
+                    {doType === 'replacement' ? (
+                      <select 
+                        name="shippingAddress" 
+                        required 
+                        value={selectedAddress} 
+                        onChange={e => setSelectedAddress(e.target.value)}
+                        className="flex h-10 w-full rounded-lg border border-[#0C4196] bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none font-bold"
+                      >
+                        <option value="">Pilih Alamat Pengiriman...</option>
+                        {selectableShippingAreas.map(addr => (
+                          <option key={addr} value={addr}>
+                            {addr}
                           </option>
-                        );
-                      })}
-                    </select>
-                    {selectedAddress && addressStatus[selectedAddress] && (
+                        ))}
+                      </select>
+                    ) : (
+                      <select 
+                        name="shippingAddress" 
+                        required 
+                        value={selectedAddress} 
+                        onChange={e => setSelectedAddress(e.target.value)}
+                        className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none"
+                      >
+                        <option value="">Pilih Alamat...</option>
+                        {uniqueAddresses.map(addr => {
+                          const stats = addressStatus[addr];
+                          const isFulfilled = stats?.isFulfilled;
+                          return (
+                            <option key={addr} value={addr} disabled={isFulfilled} className={isFulfilled ? 'text-slate-300' : ''}>
+                              {addr} {isFulfilled ? '(FULFILLED)' : `(${stats?.totalShipped}/${stats?.totalOrdered})`}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
+                    {doType === 'normal' && selectedAddress && addressStatus[selectedAddress] && (
                        <p className="text-[10px] font-bold text-[#0C4196] mt-1 uppercase italic">
                          Progress pengiriman ke alamat ini: {addressStatus[selectedAddress].totalShipped} dari {addressStatus[selectedAddress].totalOrdered} unit.
                        </p>
                     )}
                   </div>
-
+ 
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">Catatan</Label>
                     <Input name="notes" placeholder="Instruksi pengiriman..." className="h-10 rounded-lg focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" />
@@ -614,6 +958,7 @@ export function Outbound() {
                   <TableRow className="h-12 hover:bg-transparent">
                     <TableHead className="font-bold text-slate-600 text-xs pl-6">Tanggal</TableHead>
                     <TableHead className="font-bold text-slate-600 text-xs">Nomor DO</TableHead>
+                    <TableHead className="font-bold text-slate-600 text-xs">Jenis DO</TableHead>
                     <TableHead className="font-bold text-slate-600 text-xs">Nomor PO</TableHead>
                     <TableHead className="font-bold text-slate-600 text-xs">Ekspedisi</TableHead>
                     <TableHead className="font-bold text-slate-600 text-xs">Gudang</TableHead>
@@ -625,7 +970,7 @@ export function Outbound() {
                 <TableBody>
                   {filteredDeliveries.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-20 text-slate-400">
+                      <TableCell colSpan={9} className="text-center py-20 text-slate-400">
                         Tidak ada riwayat pengiriman ditemukan.
                       </TableCell>
                     </TableRow>
@@ -634,8 +979,30 @@ export function Outbound() {
                       const poNum = underlyingPos.find(u => u.id === deli.underlyingPoId)?.poNumber || '-';
                       return (
                       <TableRow key={deli.id} className="h-16 group hover:bg-slate-50/50">
-                        <TableCell className="text-xs text-slate-500 pl-6">{format(new Date(deli.createdAt), 'dd/MM/yyyy HH:mm')}</TableCell>
-                        <TableCell className="font-mono text-xs text-[#0C4196] uppercase">{deli.doNumber}</TableCell>
+                        <TableCell className="text-xs text-slate-500 pl-6">
+                          {deli.createdAt ? (() => {
+                            try {
+                              const d = new Date(deli.createdAt);
+                              return isNaN(d.getTime()) ? '-' : format(d, 'dd/MM/yyyy HH:mm');
+                            } catch (e) {
+                              return '-';
+                            }
+                          })() : '-'}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-[#0C4196] uppercase font-bold">
+                          {deli.doNumber}
+                        </TableCell>
+                        <TableCell>
+                          {deli.type === 'replacement' ? (
+                            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-200">
+                              Replacement DO
+                            </span>
+                          ) : (
+                            <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase bg-[#0C4196]/10 text-[#0C4196] border border-[#0C4196]/20">
+                              Normal DO
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs font-bold text-slate-700 uppercase">{poNum}</TableCell>
                         <TableCell className="text-sm font-bold text-slate-900">
                           {expeditions.find(e => e.id === deli.expeditionId)?.name || '-'}
@@ -707,8 +1074,10 @@ export function Outbound() {
                 const now = Date.now();
                 await runTransaction(db, async (transaction) => {
                   const ledgerRef = doc(collection(db, 'inventory_ledgers'));
+                  const returnNo = (category === 'Returned' ? 'RET-' : 'DAM-') + now;
+                  
                   transaction.set(ledgerRef, {
-                    transactionNumber: (category === 'Returned' ? 'RET-' : 'DAM-') + now,
+                    transactionNumber: returnNo,
                     transactionType: 'OUTBOUND_DAMAGE',
                     productId,
                     ownerId: damageTarget.ownerId,
@@ -720,6 +1089,53 @@ export function Outbound() {
                     createdBy: appUser?.uid,
                     createdAt: now
                   });
+
+                  // Write return_requests document (Return/damage record)
+                  const returnRequestRef = doc(collection(db, 'return_requests'));
+                  const matchedSpo = supplyPos.find(s => s.id === damageTarget.supplyPoId);
+                  const spoNo = matchedSpo ? matchedSpo.supplyPoNumber : '';
+
+                  transaction.set(returnRequestRef, {
+                    returnNumber: returnNo,
+                    underlying_po_id: damageTarget.underlyingPoId || '',
+                    underlyingPoId: damageTarget.underlyingPoId || '',
+                    supplyPoId: damageTarget.supplyPoId || '',
+                    supplyPoNumber: spoNo || '',
+                    do_id: damageTarget.id || '',
+                    doNumber: damageTarget.doNumber || '',
+                    productId,
+                    qty: damagedQty,
+                    category: category || 'Damaged',
+                    notes: desc,
+                    shippingAddress: damageTarget.shippingAddress || '',
+                    shipping_area_id: damageTarget.shippingAddress || '',
+                    status: 'Pending',
+                    warehouseId: damageTarget.warehouseId,
+                    ownerId: damageTarget.ownerId,
+                    createdAt: now,
+                    createdBy: appUser?.uid
+                  });
+
+                  // Update inventory (Status stock menjadi damaged)
+                  const invId = `${damageTarget.ownerId}_${damageTarget.warehouseId}_${productId}`;
+                  const invRef = doc(db, 'inventory', invId);
+                  const invSnap = await transaction.get(invRef);
+                  
+                  let currentOnHand = invSnap.exists() ? (Number(invSnap.data().onHandQty) || 0) : 0;
+                  let currentDamaged = invSnap.exists() ? (Number(invSnap.data().damagedQty) || 0) : 0;
+                  let currentAvailable = invSnap.exists() ? (Number(invSnap.data().availableQty) || 0) : 0;
+                  let currentReserved = invSnap.exists() ? (Number(invSnap.data().reservedQty) || 0) : 0;
+
+                  const newOnHand = currentOnHand + damagedQty;
+                  const newDamaged = currentDamaged + damagedQty;
+                  const newAvailable = newOnHand - currentReserved - newDamaged; // availableQty stays unchanged
+
+                  transaction.set(invRef, {
+                    onHandQty: newOnHand,
+                    damagedQty: newDamaged,
+                    availableQty: newAvailable,
+                    updatedAt: now
+                  }, { merge: true });
 
                   const auditRef = doc(collection(db, 'audit_logs'));
                   transaction.set(auditRef, {
@@ -739,7 +1155,7 @@ export function Outbound() {
                 toast.error('Gagal lapor kerusakan: ' + err.message);
               }
             }} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                    <Label className="text-xs font-bold uppercase text-slate-500">Pilih Produk</Label>
                    <select 
@@ -821,14 +1237,14 @@ export function Outbound() {
 
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
         <DialogContent className="sm:max-w-5xl rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-6 bg-[#0C4196] text-white">
+          <DialogHeader className="p-4 sm:p-6 bg-[#0C4196] text-white">
             <DialogTitle className="text-xl font-bold flex items-center gap-3">
               <ArrowUpFromLine className="w-6 h-6" /> Detail Barang Keluar
             </DialogTitle>
           </DialogHeader>
           {viewOutbound && (
-            <div className="p-8 space-y-8 max-h-[80vh] overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-2 gap-8 text-sm">
+            <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 max-h-[80vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-8 text-sm">
                 <div className="space-y-4">
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No. Outbound / DO</span>
@@ -850,7 +1266,16 @@ export function Outbound() {
                 <div className="space-y-4">
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tanggal</span>
-                    <span className="font-bold text-slate-900">{format(new Date(viewOutbound.createdAt), 'dd MMMM yyyy HH:mm')}</span>
+                    <span className="font-bold text-slate-900">
+                      {viewOutbound.createdAt ? (() => {
+                        try {
+                          const d = new Date(viewOutbound.createdAt);
+                          return isNaN(d.getTime()) ? '-' : format(d, 'dd MMMM yyyy HH:mm');
+                        } catch (e) {
+                          return '-';
+                        }
+                      })() : '-'}
+                    </span>
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Underlying PO</span>
@@ -859,9 +1284,15 @@ export function Outbound() {
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Supply PO (Allocation)</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Vendor PO (Allocation)</span>
                     <span className="font-bold text-slate-900">
-                      {supplyPos.find(s => s.id === viewOutbound.supplyPoId)?.supplyPoNumber || '-'}
+                      {viewOutbound.type === 'replacement' ? (
+                        <span className="text-amber-600 font-extrabold uppercase">
+                          Bypassed (Replacement DO)
+                        </span>
+                      ) : (
+                        supplyPos.find(s => s.id === viewOutbound.supplyPoId)?.supplyPoNumber || '-'
+                      )}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">

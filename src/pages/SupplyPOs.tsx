@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/store/authStore';
 import { format } from 'date-fns';
 
-// Supply PO Dokumen pengadaan dan pengiriman barang ke warehouse.
+// Vendor PO Dokumen pengadaan dan pengiriman barang ke warehouse.
 // Relates to UnderlyingPO, Owner, Warehouse
 
 export function SupplyPOs() {
@@ -49,7 +49,7 @@ export function SupplyPOs() {
     // Items in Underlying PO
     const upoItems = selectedUPO.items || [];
     
-    // Approved Supply POs for this Underlying PO
+    // Approved Vendor POs for this Underlying PO
     const relatedApprovedSPOs = pos.filter(p => p.underlyingPoId === selectedUPOId && p.status !== 'Draft' && p.status !== 'Cancelled');
     
     // Calculate consumed per product
@@ -162,7 +162,7 @@ export function SupplyPOs() {
           }
         }
 
-        // Create Supply PO (Verified)
+        // Create Vendor PO (Verified)
         const spoRef = doc(collection(db, 'supply_pos'));
         transaction.set(spoRef, {
           supplyPoNumber: fd.get('supplyPoNumber') as string,
@@ -182,14 +182,14 @@ export function SupplyPOs() {
         const auditRef = doc(collection(db, 'audit_logs'));
         transaction.set(auditRef, {
             user: appUser?.name || 'Unknown',
-            action: 'Supply PO Created & Verified (Auto-Reserved)',
-            module: 'Supply PO',
+            action: 'Vendor PO Created & Verified (Auto-Reserved)',
+            module: 'Vendor PO',
             recordId: spoRef.id,
             timestamp: now
         });
       });
 
-      toast.success('Supply PO dibuat & Stok otomatis direservasi');
+      toast.success('Vendor PO dibuat & Stok otomatis direservasi');
       setIsOpen(false);
       setSelectedUPOId('');
     } catch (error: any) {
@@ -259,15 +259,15 @@ export function SupplyPOs() {
         const auditRef = doc(collection(db, 'audit_logs'));
         transaction.set(auditRef, {
             user: appUser?.name || 'Unknown',
-            action: 'Supply PO Verified (Reservation Created)',
-            module: 'Supply PO',
+            action: 'Vendor PO Verified (Reservation Created)',
+            module: 'Vendor PO',
             recordId: po.id,
             timestamp: Date.now()
         });
       });
 
       toast.dismiss(loadingToast);
-      toast.success('Supply PO diverifikasi & Stok direservasi');
+      toast.success('Vendor PO diverifikasi & Stok direservasi');
     } catch (err: any) {
       console.error('Verify error:', err);
       toast.dismiss(loadingToast);
@@ -296,7 +296,7 @@ export function SupplyPOs() {
     if (!isAdminOrManager) return;
     
     if (po.status === 'Completed') {
-      toast.error('Cannot delete a completed Supply PO');
+      toast.error('Cannot delete a completed Vendor PO');
       return;
     }
 
@@ -330,15 +330,15 @@ export function SupplyPOs() {
         const auditRef = doc(collection(db, 'audit_logs'));
         transaction.set(auditRef, {
             user: appUser?.name || 'Unknown',
-            action: `Supply PO Deleted (Status: ${po.status}${po.status !== 'Draft' ? ', Stock Restored' : ''})`,
-            module: 'Supply PO',
+            action: `Vendor PO Deleted (Status: ${po.status}${po.status !== 'Draft' ? ', Stock Restored' : ''})`,
+            module: 'Vendor PO',
             recordId: po.id,
             timestamp: Date.now()
         });
       });
 
       toast.dismiss(loadingToast);
-      toast.success('Supply PO dihapus & Reservasi dikembalikan');
+      toast.success('Vendor PO dihapus & Reservasi dikembalikan');
     } catch(err: any) {
       console.error('Delete error:', err);
       toast.dismiss(loadingToast);
@@ -347,12 +347,12 @@ export function SupplyPOs() {
   };
 
   const handleClearAll = async () => {
-    if (!window.confirm('PERHATIAN: Apakah Anda yakin ingin menghapus SEMUA data Supply PO?')) return;
+    if (!window.confirm('PERHATIAN: Apakah Anda yakin ingin menghapus SEMUA data Vendor PO?')) return;
     try {
       for (const p of pos) {
         await deleteDoc(doc(db, 'supply_pos', p.id));
       }
-      toast.success('Semua data Supply PO berhasil dihapus!');
+      toast.success('Semua data Vendor PO berhasil dihapus!');
     } catch(err: any) {
       console.error(err);
       toast.error('Gagal menghapus semua data: ' + err.message);
@@ -363,7 +363,7 @@ export function SupplyPOs() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Supply PO (Stock Allocation)</h2>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Vendor PO (Stock Allocation)</h2>
           <p className="text-sm md:text-base text-slate-500 font-medium mt-2">Alokasi dan reservasi stok berdasarkan Underlying PO</p>
         </div>
         
@@ -378,15 +378,15 @@ export function SupplyPOs() {
               <DialogTrigger nativeButton={true} render={
                 <Button className="w-full sm:w-auto bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg px-6 font-bold shadow-sm transition-all h-11">
                   <Plus className="w-4 h-4 mr-2" />
-                  Buat Allocation (SPO)
+                  Buat Allocation (VPO)
                 </Button>
               } />
             <DialogContent className="rounded-xl sm:max-w-[1200px] w-[95vw] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-xl font-bold">Buat Stock Allocation (Supply PO)</DialogTitle>
+                <DialogTitle className="text-xl font-bold">Buat Stock Allocation (Vendor PO)</DialogTitle>
               </DialogHeader>
               <form onSubmit={onSubmit} className="space-y-6 mt-6">
-                <div className="grid grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                    <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">1. Referensi Underlying PO</Label>
                     <select name="underlyingPoId" required value={selectedUPOId} onChange={e => setSelectedUPOId(e.target.value)} className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none">
@@ -395,8 +395,8 @@ export function SupplyPOs() {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-600 uppercase">2. Supply PO Number (Internal)</Label>
-                    <Input name="supplyPoNumber" required placeholder="Contoh: SPO-ALLOC-001" className="h-10 rounded-lg focus:border-[#0C4196]" />
+                    <Label className="text-xs font-bold text-slate-600 uppercase">2. Vendor PO Number (Internal)</Label>
+                    <Input name="supplyPoNumber" required placeholder="Contoh: VPO-ALLOC-001" className="h-10 rounded-lg focus:border-[#0C4196]" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">3. Target Gudang (Stock Location)</Label>
@@ -409,7 +409,7 @@ export function SupplyPOs() {
 
                 {upoStats && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl shadow-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl shadow-sm">
                       <div className="flex flex-col gap-1">
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Customer</span>
                         <span className="font-bold text-slate-900 border-b border-white pb-1">{upoStats.customer?.name || '-'}</span>
@@ -492,7 +492,7 @@ export function SupplyPOs() {
 
                 <div className="flex justify-end pt-4 border-t">
                     <Button type="submit" disabled={!selectedUPOId} className="w-full h-11 bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg font-bold shadow-sm">
-                        Submit Supply PO (Draft Allocation)
+                        Submit Vendor PO (Draft Allocation)
                     </Button>
                 </div>
               </form>
@@ -507,7 +507,7 @@ export function SupplyPOs() {
           <div className="relative w-full max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <Input 
-               placeholder="Cari Supply PO..." 
+               placeholder="Cari Vendor PO..." 
                value={searchQuery}
                onChange={(e) => setSearchQuery(e.target.value)}
                className="pl-9 h-10 rounded-lg bg-white border-slate-200 focus:border-[#0C4196] focus:ring-1 focus:ring-[#0C4196]" 
@@ -518,7 +518,7 @@ export function SupplyPOs() {
           <Table className="min-w-[900px]">
             <TableHeader className="bg-slate-50 border-b border-slate-200">
               <TableRow className="hover:bg-transparent h-12">
-                <TableHead className="font-bold text-slate-600 text-xs pl-6">Supply PO No</TableHead>
+                <TableHead className="font-bold text-slate-600 text-xs pl-6">Vendor PO No</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs text-center">Status</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs">Underlying PO</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs">Produk Alokasi</TableHead>
@@ -531,7 +531,7 @@ export function SupplyPOs() {
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-20 text-slate-400">
                     <Layers className="w-12 h-12 mx-auto text-slate-200 mb-3" />
-                    <p className="text-sm font-bold text-slate-600">Supply PO tidak ditemukan</p>
+                    <p className="text-sm font-bold text-slate-600">Vendor PO tidak ditemukan</p>
                   </TableCell>
                 </TableRow>
               ) : (

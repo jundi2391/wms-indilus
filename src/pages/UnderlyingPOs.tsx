@@ -298,7 +298,7 @@ export function UnderlyingPOs() {
                 <DialogTitle className="text-xl font-bold">{editPO ? 'Ubah Underlying PO' : 'Tambah Underlying PO'}</DialogTitle>
               </DialogHeader>
               <form onSubmit={onSubmit} className="space-y-4 mt-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">Underlying PO Number</Label>
                     <Input name="poNumber" required placeholder="Contoh: PO-TELKOM-001" className="h-10 rounded-lg focus:border-[#0C4196]" defaultValue={editPO?.poNumber} />
@@ -328,7 +328,7 @@ export function UnderlyingPOs() {
                           <Trash2 className="w-3 h-3" />
                         </Button>
                       )}
-                      <div className="grid grid-cols-2 gap-3 pr-8">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pr-8">
                         <div className="space-y-1.5">
                           <Label className="text-xs font-bold text-slate-600 uppercase">Product</Label>
                           <select required value={item.productId} onChange={(e) => {
@@ -369,7 +369,7 @@ export function UnderlyingPOs() {
                   ))}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">Owner Inventory</Label>
                     <select name="ownerId" required className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-[#0C4196] outline-none" defaultValue={editPO?.ownerId}>
@@ -386,7 +386,7 @@ export function UnderlyingPOs() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">Tanggal PO</Label>
                     <Input name="poDate" type="date" required className="h-10 rounded-lg focus:border-[#0C4196]" defaultValue={editPO?.poDate} />
@@ -535,8 +535,8 @@ export function UnderlyingPOs() {
       </div>
 
       <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
-        <DialogContent className="sm:max-w-[1200px] w-[95vw] rounded-xl max-h-[90vh] overflow-y-auto shadow-2xl p-0">
-          <div className="p-6 md:p-10">
+        <DialogContent className="sm:max-w-[1200px] w-[95vw] rounded-xl max-h-[90vh] overflow-y-auto overflow-x-hidden shadow-2xl p-0">
+          <div className="p-4 sm:p-6 md:p-10 w-full max-w-full min-w-0 overflow-x-hidden">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold flex items-center gap-2">
                 <FileText className="w-5 h-5 text-[#0C4196]" />
@@ -545,7 +545,7 @@ export function UnderlyingPOs() {
             </DialogHeader>
             {viewingPO && (
               <div className="space-y-6 pt-4">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
                   <div className="space-y-1">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No. PO</span>
                     <p className="font-bold text-slate-900">{viewingPO.poNumber}</p>
@@ -566,7 +566,7 @@ export function UnderlyingPOs() {
                       </span>
                     </div>
                   </div>
-                  <div className="space-y-1 text-right">
+                  <div className="space-y-1 sm:text-right">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tgl PO</span>
                     <p className="font-bold text-slate-900">{viewingPO.poDate ? format(new Date(viewingPO.poDate), 'dd/MM/yyyy') : '-'}</p>
                   </div>
@@ -642,9 +642,9 @@ export function UnderlyingPOs() {
                                          className="h-7 text-[10px] font-bold border-blue-200 text-[#0C4196] hover:bg-blue-50"
                                          onClick={async () => {
                                             if (!window.confirm(`Buat alokasi sisa untuk ${remaining} unit?`)) return;
-                                            const loadingToast = toast.loading('Menyiapkan Alokasi Sisa (Supply PO)...');
+                                            const loadingToast = toast.loading('Menyiapkan Alokasi Sisa (Vendor PO)...');
                                             try {
-                                               const spoNum = `SPO-${viewingPO.poNumber}-${Date.now().toString().slice(-4)}`;
+                                               const spoNum = `VPO-${viewingPO.poNumber}-${Date.now().toString().slice(-4)}`;
                                                await addDoc(collection(db, 'supply_pos'), {
                                                   underlyingPoId: viewingPO.id,
                                                   supplyPoNumber: spoNum,
@@ -659,7 +659,7 @@ export function UnderlyingPOs() {
                                                   }]
                                                });
                                                toast.dismiss(loadingToast);
-                                               toast.success(`Berhasil membuat draft alokasi sisa (${remaining} unit). Cek menu Supply PO.`);
+                                               toast.success(`Berhasil membuat draft alokasi sisa (${remaining} unit). Cek menu Vendor PO.`);
                                             } catch (err: any) {
                                                toast.dismiss(loadingToast);
                                                toast.error('Gagal membuat alokasi: ' + err.message);

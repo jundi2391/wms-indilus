@@ -10,10 +10,12 @@ import { collection, query, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/store/authStore';
 import { useNavigate } from 'react-router-dom';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function Warehouses() {
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [editWarehouse, setEditWarehouse] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -22,13 +24,27 @@ export function Warehouses() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let count = 0;
+    const checkLoading = () => {
+      count++;
+      if (count >= 2) setLoading(false);
+    };
+
     const q = query(collection(db, 'warehouses'));
     const unsubscribeWH = onSnapshot(q, (snapshot) => {
       setWarehouses(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      checkLoading();
+    }, (error) => {
+      console.error(error);
+      checkLoading();
     });
 
     const unsubscribeInv = onSnapshot(collection(db, 'inventory'), (snapshot) => {
       setInventory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      checkLoading();
+    }, (error) => {
+      console.error(error);
+      checkLoading();
     });
 
     return () => {
@@ -148,7 +164,40 @@ export function Warehouses() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {warehouses.length === 0 ? (
+        {loading ? (
+          Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex justify-between items-start mb-4">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-6 w-40" />
+                  </div>
+                  <Skeleton className="h-5 w-12 rounded" />
+                </div>
+                <div className="flex gap-8 mb-6">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-14" />
+                    <Skeleton className="h-5 w-10" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-14" />
+                    <Skeleton className="h-5 w-8" />
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-between items-center pt-4 border-t border-slate-50">
+                <Skeleton className="h-4 w-28" />
+                {isAdmin && (
+                  <div className="flex gap-1">
+                    <Skeleton className="h-8 w-8 rounded-lg" />
+                    <Skeleton className="h-8 w-8 rounded-lg" />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        ) : warehouses.length === 0 ? (
           <div className="col-span-full bg-white border border-dashed border-slate-300 rounded-xl py-16 text-center flex flex-col items-center">
             <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
               <MapPin className="w-6 h-6 text-slate-300" />

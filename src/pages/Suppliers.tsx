@@ -10,9 +10,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/store/authStore';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function Suppliers() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [editSupplier, setEditSupplier] = useState<any>(null);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -24,6 +26,10 @@ export function Suppliers() {
     const q = query(collection(db, 'suppliers'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setSuppliers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error(error);
+      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -139,7 +145,29 @@ export function Suppliers() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {suppliers.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 5 }).map((_, idx) => (
+                <TableRow key={idx} className="h-16">
+                  <TableCell className="pl-6">
+                    <Skeleton className="h-4 w-16" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-40" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-5 w-14 rounded" />
+                  </TableCell>
+                  {isAdminOrManager && (
+                    <TableCell className="text-right pr-6">
+                      <div className="flex justify-end gap-2">
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                        <Skeleton className="h-8 w-8 rounded-lg" />
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))
+            ) : suppliers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={isAdminOrManager ? 4 : 3} className="text-center py-20 text-slate-400">
                   <Truck className="w-12 h-12 mx-auto text-slate-200 mb-3" />
