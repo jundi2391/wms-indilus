@@ -613,7 +613,7 @@ export function Returns() {
                           className="w-4 h-4 rounded border-slate-300 text-[#0C4196]"
                        />
                        <Label htmlFor="createAllocation" className="text-xs font-bold text-slate-700 cursor-pointer">
-                          Alokasi Sisa (Buat VPO Baru untuk Pengiriman Ulang)
+                          Pengadaan Sisa (Buat VPO Baru untuk Pengiriman Ulang)
                        </Label>
                     </div>
                     

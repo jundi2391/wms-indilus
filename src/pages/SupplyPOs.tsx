@@ -102,14 +102,14 @@ export function SupplyPOs() {
 
     const itemsToAllocate = allocationItems.filter(it => it.qty > 0);
     if (itemsToAllocate.length === 0) {
-      toast.error('Masukkan jumlah alokasi minimal untuk satu produk');
+      toast.error('Masukkan jumlah pengadaan minimal untuk satu produk');
       return;
     }
 
     // Validation: cannot exceed remaining
     for (const it of itemsToAllocate) {
       if (it.qty > it.remaining) {
-        toast.error(`Alokasi untuk ${it.name} melebihi sisa PO (${it.remaining})`);
+        toast.error(`Pengadaan untuk ${it.name} melebihi sisa PO (${it.remaining})`);
         return;
       }
     }
@@ -363,8 +363,8 @@ export function SupplyPOs() {
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Vendor PO (Stock Allocation)</h2>
-          <p className="text-sm md:text-base text-slate-500 font-medium mt-2">Alokasi dan reservasi stok berdasarkan Underlying PO</p>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 leading-none">Vendor PO (Stock Procurement)</h2>
+          <p className="text-sm md:text-base text-slate-500 font-medium mt-2">Pengadaan dan reservasi stok berdasarkan Underlying PO</p>
         </div>
         
         <div className="flex flex-col sm:flex-row gap-2">
@@ -378,12 +378,12 @@ export function SupplyPOs() {
               <DialogTrigger nativeButton={true} render={
                 <Button className="w-full sm:w-auto bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg px-6 font-bold shadow-sm transition-all h-11">
                   <Plus className="w-4 h-4 mr-2" />
-                  Buat Allocation (VPO)
+                  Buat Procurement (VPO)
                 </Button>
               } />
             <DialogContent className="rounded-xl sm:max-w-[1200px] w-[95vw] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-xl font-bold">Buat Stock Allocation (Vendor PO)</DialogTitle>
+                <DialogTitle className="text-xl font-bold">Buat Stock Procurement (Vendor PO)</DialogTitle>
               </DialogHeader>
               <form onSubmit={onSubmit} className="space-y-6 mt-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -396,7 +396,7 @@ export function SupplyPOs() {
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">2. Vendor PO Number (Internal)</Label>
-                    <Input name="supplyPoNumber" required placeholder="Contoh: VPO-ALLOC-001" className="h-10 rounded-lg focus:border-[#0C4196]" />
+                    <Input name="supplyPoNumber" required placeholder="Contoh: VPO-PROC-001" className="h-10 rounded-lg focus:border-[#0C4196]" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 uppercase">3. Target Gudang (Stock Location)</Label>
@@ -425,17 +425,17 @@ export function SupplyPOs() {
                     </div>
 
                     <div className="space-y-3">
-                         <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest px-1">Item Allocation Matrix</h4>
+                         <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest px-1">Item Procurement Matrix</h4>
                          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm overflow-x-auto">
                             <Table className="min-w-[800px]">
                                <TableHeader className="bg-slate-50">
                                   <TableRow>
                                     <TableHead className="text-[10px] font-bold text-slate-500 uppercase">Product</TableHead>
                                     <TableHead className="text-[10px] font-bold text-slate-500 uppercase">PO Qty</TableHead>
-                                    <TableHead className="text-[10px] font-bold text-slate-500 uppercase">Allocated</TableHead>
+                                    <TableHead className="text-[10px] font-bold text-slate-500 uppercase">Procured</TableHead>
                                     <TableHead className="text-[10px] font-bold text-slate-500 uppercase">Remaining</TableHead>
                                     <TableHead className="text-[10px] font-bold text-slate-500 uppercase text-center">Fulfillment</TableHead>
-                                    <TableHead className="text-[10px] font-bold text-slate-700 uppercase bg-blue-50/50">Qty Allocation (Current)</TableHead>
+                                    <TableHead className="text-[10px] font-bold text-slate-700 uppercase bg-blue-50/50">Qty Procurement (Current)</TableHead>
                                     <TableHead className="text-[10px] font-bold text-slate-500 uppercase">Ship-to Address (Read-only)</TableHead>
                                   </TableRow>
                                </TableHeader>
@@ -487,12 +487,12 @@ export function SupplyPOs() {
 
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-600 uppercase">Catatan</Label>
-                  <Input name="notes" placeholder="Catatan internal atau instruksi alokasi..." className="h-10 rounded-lg focus:border-[#0C4196]" />
+                  <Input name="notes" placeholder="Catatan internal atau instruksi pengadaan..." className="h-10 rounded-lg focus:border-[#0C4196]" />
                 </div>
 
                 <div className="flex justify-end pt-4 border-t">
                     <Button type="submit" disabled={!selectedUPOId} className="w-full h-11 bg-[#0C4196] hover:bg-[#0C4196]/90 text-white rounded-lg font-bold shadow-sm">
-                        Submit Vendor PO (Draft Allocation)
+                        Submit Vendor PO (Draft Procurement)
                     </Button>
                 </div>
               </form>
@@ -521,7 +521,7 @@ export function SupplyPOs() {
                 <TableHead className="font-bold text-slate-600 text-xs pl-6">Vendor PO No</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs text-center">Status</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs">Underlying PO</TableHead>
-                <TableHead className="font-bold text-slate-600 text-xs">Produk Alokasi</TableHead>
+                <TableHead className="font-bold text-slate-600 text-xs">Produk Pengadaan</TableHead>
                 <TableHead className="font-bold text-slate-600 text-xs">Owner & Gudang</TableHead>
                 <TableHead className="text-right font-bold text-slate-600 text-xs text-center pr-6">Aksi</TableHead>
               </TableRow>
