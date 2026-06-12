@@ -184,20 +184,18 @@ export function Outbound() {
   }, [doType, selectedUPOIdReplacement, returnRequests]);
 
   useEffect(() => {
-    if (doType === 'normal') {
-      if (uniqueAddresses.length === 1) {
-        setSelectedAddress(uniqueAddresses[0]);
+    setSelectedAddress(prev => {
+      if (doType === 'normal') {
+        if (uniqueAddresses.length === 1) return uniqueAddresses[0];
+        if (!uniqueAddresses.includes(prev)) return '';
+        return prev;
       } else {
-        setSelectedAddress('');
+        if (selectableShippingAreas.length === 1) return selectableShippingAreas[0];
+        if (!selectableShippingAreas.includes(prev)) return '';
+        return prev;
       }
-    } else {
-      if (selectableShippingAreas.length === 1) {
-        setSelectedAddress(selectableShippingAreas[0]);
-      } else if (!selectableShippingAreas.includes(selectedAddress)) {
-        setSelectedAddress('');
-      }
-    }
-  }, [uniqueAddresses, doType, selectableShippingAreas, selectedAddress]);
+    });
+  }, [uniqueAddresses, doType, selectableShippingAreas]);
 
   // Group and autofill items from all pending return requests for selected UPO
   const autoItems = useMemo(() => {
